@@ -37,58 +37,45 @@ class GuiHandler:
     def __init__(self):
         self.gui_theme = "DarkTeal6"
 
-    def welcome_login_window(self):
-        welcome_gui_layout = [
-            [sg.Text("Personal email address:"), sg.Input(key="Archiver Email")],
-            [sg.Button("Ok"), sg.Button("Exit")]
-        ]
+    def make_window(self, window_layout: list, window_name: str):
         sg.theme(self.gui_theme)
         # launch gui
-        dist_window = sg.Window("Welcome!", welcome_gui_layout)
+        dist_window = sg.Window(window_name, window_layout)
         event, values = dist_window.read()
         values["Button Event"] = event
         dist_window.close()
         return defaultdict(None, values)
 
-    def choose_destination_window(self, dir_choices: list[str], default_project_num: str = None,
+    def welcome_layout(self):
+        welcome_gui_layout = [
+            [sg.Text("Personal email address:"), sg.Input(key="Archiver Email")],
+            [sg.Button("Ok"), sg.Button("Exit")]
+        ]
+        return welcome_gui_layout
+
+    def choose_destination_layout(self, dir_choices: list[str], default_project_num: str = None,
                                   file_exists_to_archive: bool = False):
+
         destination_gui_layout = [[sg.Text("Default Project:"), sg.Text(default_project_num)],
                                   [sg.Text("Project Number (Leave Blank to use Default.):"),
                                    sg.Input(key="New Project Number")],
                                   [sg.Text("Default Project:"), sg.Listbox(values=dir_choices)],
                                   [sg.Text("Alternatively, Enter the full destination path:")],
-                                  [sg.Input(key="New Project Number")]]
-
+                                  [sg.Input(key="New Project Number")]
         if not file_exists_to_archive:
             destination_gui_layout.append([sg.Text("No file available to archive. Add a file before clicking 'Ok'.")])
 
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
+        return destination_gui_layout
 
-        # TODO add helper information to this gui
-        sg.theme(self.gui_theme)
-        # launch gui
-        dist_window = sg.Window("Enter destination directory or path.", destination_gui_layout)
-        event, values = dist_window.read()
-        values["Button Event"] = event
-        dist_window.close()
-        return defaultdict(None, values)
-
-    def confirmation_window(self):
-        # TODO make this windowa
-        welcome_gui_layout = [
+    def confirmation_layout(self):
+        confirmation_gui_layout = [
             [sg.Text("Personal email address:"), sg.Input(key="user_email")],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("exit")]
         ]
-        sg.theme(self.gui_theme)
-        # launch gui
-        dist_window = sg.Window("Welcome!", welcome_gui_layout)
-        event, values = dist_window.read()
-        values["Button Event"] = event
-        dist_window.close()
-        return defaultdict(None, values)
+        return confirmation_gui_layout
 
-    def failed_destination_choice_window(self, fail_reason: str, fail_path: str):
-        # TODO complete this window
+    def failed_destination_layout(self,  fail_reason: str, fail_path: str):
         failed_gui_layout = [
             [sg.Text("Could not reconcile the given destination choice:")],
             [sg.Text(fail_path)],
@@ -96,27 +83,23 @@ class GuiHandler:
             [sg.Text(fail_reason)],
             [sg.Button("Back"), sg.Button("Exit")]
         ]
-        sg.theme(self.gui_theme)
-        # launch gui
-        dist_window = sg.Window("Welcome!", failed_gui_layout)
-        event, values = dist_window.read()
-        values["Button Event"] = event
-        dist_window.close()
-        return defaultdict(None, values)
+        return failed_gui_layout
 
-    def error_message_window(self, error_message: str):
+    def error_message_layout(self, error_message: str):
         error_gui_layout = [
             [sg.Text("Oops, an error occured:")],
             [ sg.Text(error_message)],
             [sg.Button("Back"), sg.Button("Exit")]
         ]
-        sg.theme(self.gui_theme)
-        # launch gui
-        dist_window = sg.Window("Welcome!", error_gui_layout)
-        event, values = dist_window.read()
-        values["Button Event"] = event
-        dist_window.close()
-        return defaultdict(None, values)
+        return error_gui_layout
+
+
+class ArchivalFile:
+
+    def __init__(self, location_path: str, project: str, destination_dir: str, destination_path: str,
+                 new_filename: str, notes: str):
+        pass
+
 
 
 class Archiver:
@@ -138,11 +121,13 @@ class Archiver:
         self.archiver_email = None
         self.archive_data = defaultdict(None, {})
         self.default_project_number = None
+        self.file_to_archive = None
 
 
     def retrieve_archiver_email(self):
 
-        welcome_window_results = self.gui.welcome_login_window()
+        welcome_window_layout = self.gui.welcome_layout()
+        welcome_window_results = self.gui.make_window(welcome_window_layout,"Welcome!")
 
         #if the user clicks exit, shutdown app
         if welcome_window_results["Button Event"].lower() == "exit":
@@ -163,14 +148,16 @@ class Archiver:
 
     def elicit_destination_selection(self):
 
-        file_exists = (len(self.files_to_archive()) > 0)
+        file_exists = (len(self.files_to_archive()) == 1)
         default_proj_number = ""
         if self.default_project_number:
             default_proj_number = self.default_project_number
+        destination_window_layout = self.gui.choose_destination_layout(dir_choices= DIRECTORY_CHOICES,
+                                                                       default_project_num= default_proj_number,
+                                                                       file_exists_to_archive= file_exists)
+        destination_gui_results = self.gui.make_window(window_layout= destination_window_layout,
+                                                       window_name= "Enter file and destination info.")
 
-        destination_gui_results = self.gui.choose_destination_window(DIRECTORY_CHOICES,
-                                                                     default_proj_number= default_proj_number,
-                                                                     file_exists_to_archive= file_exists)
         if destination_gui_results["Button Event"].lower() == "exit":
             self.exit_app()
         if destination_gui_results["New Project Number"]:
@@ -180,7 +167,12 @@ class Archiver:
             return ""
 
         if destination_gui_results["Button Event"].lower() == "ok":
-            return
+            project_num = destination_gui_results["New Project Number"]
+            if not project_num:
+                project_num = default_proj_number
+
+
+            return ""
 
 
 
