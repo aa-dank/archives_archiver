@@ -1,12 +1,59 @@
 import os
+import logging
 import pandas as pd
 import PySimpleGUI as sg
 
 from collections import defaultdict
 
 #Environmental Variables
+RECORDS_SERVER_LOCATION = r"""R:\\"""
 FILENAMES_TO_IGNORE = ["desktop.ini"]
-DIRECTORY_CHOICES = [""]
+DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 'C - Consultants',
+                     'D - Environmental Review Process', 'E - Program and Design',
+                     'F - Bid Documents and Contract Award', 'G - Construction', "H - Submittals and O&M's",
+                     'A1 - Miscellaneous', 'A2 - Working File', 'A3 - Project Directory Matrix & Project Chronology',
+                     "B1 - CPS and Chancellor's Approvals", 'B100 - Other', 'B11 - LEED',
+                     'B12 - Outside Regulatory Agencies', 'B13 - Coastal Commission',
+                     'B2 - Office of the President UC Regents', 'B3 - State Public Works Board',
+                     'B4 - Department of Finance', 'B5 - Legislavtive Submittals', 'B6 - State Fire Marshal',
+                     'B7 - Office of State Architect  (DSA)', 'B8 -  General Counsel',
+                     'B8.1 - General Counsel - Confidential', 'C1 - Executive Architect', 'C1.1 - Selection',
+                     'C1.2 - Correspondence', 'C1.3 - Agreement', 'C2 - Other Consultants', 'C2.1 - Selection',
+                     'C2.2 - Correspondence', 'C2.3 - Agreement', 'D1 - Environmental Correspondence',
+                     'D2 - EIC Forms', 'D3 - CEQA Documentation', 'D4 - Mitigation Monitoring Program', 'E1 - DPP',
+                     'E2 - PPG', 'E3 - Budget Cost Estimates', 'E4 - Planning Schedules',
+                     'E5 - Program and Design Correspondence', 'E5.1 - Executive Architect to.from',
+                     'E5.2 - Special Consultants', 'E5.3 - Users. Building Committee. Campus to.from',
+                     'E5.4 - PPC and PP', 'E5.5 - Office of the President to.from', 'E5.6 - Building Committee to.from',
+                     'E5.7 - Other', 'E5.8 - Office of General Counsel', 'E6 - Reports (soils, structural, calcs)',
+                     'E7 - Value Engineering', 'E7.1 - Value Engineering Correspondence',
+                     'E7.2 - VE Workshop Minutes, Summaries, Final Reports', 'E8 - Program and Design Meeting Minutes',
+                     'F1 - Bid and Contract Award Correspondence', 'F1.1 - Executive Architect to.from',
+                     'F1.2 - Special Consultatns to.from', 'F1.4 - PPC and PP',
+                     'F1.5 - Office of the President to.from', 'F1.6 - General Cousel to.from',
+                     'F1.6A - Gerneal Counsel Confidential', 'F1.7 - Pre-Qualification', 'F1.8 - Other',
+                     'F10 - Escrow Agreement', 'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews',
+                     'F2.2 - In-house. PP reviews', 'F2.3 - Independent Cost Review',
+                     'F2.4 - Independent Seismic Review', 'F2.5 - Other', 'F5 - Drawings and Spec',
+                     'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract', 'F9 - Builders Risk Insurance',
+                     'G1 - Construction Correspondence', 'G1.1 - Contractor to.from',
+                     'G1.2 - Executive Architect to.from', 'G1.3 - Users.Building Committee.Campus to.from',
+                     'G1.4 - PPC and PP. Certified Payroll', 'G1.5 - Geotechnical Engineer to.from',
+                     'G1.6 - Testing and Inspection to Laboratory to.from', 'G1.7 - General Counsel to.from',
+                     'G1.7A - General Counsel Confidential', 'G1.8 - Other',
+                     'G10 - Testing and Inspection Reports.Other',
+                     'G11 - Proposal Request. Bulletins. Contractors Response',
+                     'G11.1 - Proposal Request 1 with back up', 'G11.2 - Proposal Request 2',
+                     'G11.3 - Proposal Request 3', 'G12 - Request for Information RFI',
+                     'G13 - Letter of Instruction LOI', 'G14 - User Request Change in Scope', 'G15 - Change Order',
+                     'G15.1 - Change Order 1 with back up', 'G15.2 - Change Order 2', 'G15.3 - Change Order 3',
+                     'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist', 'G19 - NOC',
+                     'G2 - Certificate of Payment', 'G20 - Warrranty Deficiency', 'G21 - Construction Photos',
+                     'G22 - Claims. Public Records Act', 'G22.1 - Claims Confidential', 'G23 - Commissioning',
+                     'G24 - Building Permits', "G3 - Contractor's Schedule and Updates", 'G4 - Progress Meeting Notes',
+                     'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits', 'G6 - UCSC Memoranda',
+                     'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
+                     'G8 - Testing and Inspection Reports. Geotechnical Engineer']
 
 class ArchiverHelpers:
 
@@ -27,6 +74,21 @@ class ArchiverHelpers:
                 allparts.insert(0, parts[1])
         return allparts
 
+    @staticmethod
+    def prefix_from_project_number(project_no: str):
+        """
+        returns root directory prefix for given project number.
+        eg project number 10638 returns 106xx, project number 9805A returns 98xx
+        :param project_no: string project number
+        :return: project directory root directory prefix for choosing correct root directory
+        """
+        project_no = project_no.split("-")[0]
+        project_no = ''.join(i for i in project_no if i.isdigit())
+        prefix = project_no[:3]
+        if len(project_no) <= 4:
+            prefix = project_no[:2]
+        return prefix + 'xx'
+
 
 class GuiHandler:
     """
@@ -37,7 +99,7 @@ class GuiHandler:
     def __init__(self):
         self.gui_theme = "DarkTeal6"
 
-    def make_window(self, window_layout: list, window_name: str):
+    def make_window(self, window_name: str, window_layout: list):
         sg.theme(self.gui_theme)
         # launch gui
         dist_window = sg.Window(window_name, window_layout)
@@ -55,13 +117,18 @@ class GuiHandler:
 
     def choose_destination_layout(self, dir_choices: list[str], default_project_num: str = None,
                                   file_exists_to_archive: bool = False):
+        dir_choices.sort()
+        #TODO try auto_size_text and expand_y
+        listbox_width = max([len(dir_name) for dir_name in dir_choices])
+        listbox_height = 36
 
         destination_gui_layout = [[sg.Text("Default Project:"), sg.Text(default_project_num)],
                                   [sg.Text("Project Number (Leave Blank to use Default.):"),
                                    sg.Input(key="New Project Number")],
-                                  [sg.Text("Default Project:"), sg.Listbox(values=dir_choices)],
-                                  [sg.Text("Alternatively, Enter the full destination path:")],
-                                  [sg.Input(key="New Project Number")]
+                                  [sg.Text("Choose Directory to for file:"),
+                                   sg.Listbox(values= dir_choices, key= "Directory Choice", size=(listbox_width, listbox_height))],
+                                  [sg.Text("Alternatively, Enter the full path to directory where the file has been archived:")],
+                                  [sg.Input(key="Manual Path")]]
         if not file_exists_to_archive:
             destination_gui_layout.append([sg.Text("No file available to archive. Add a file before clicking 'Ok'.")])
 
@@ -69,6 +136,7 @@ class GuiHandler:
         return destination_gui_layout
 
     def confirmation_layout(self):
+        #TODO make this window. Should it have
         confirmation_gui_layout = [
             [sg.Text("Personal email address:"), sg.Input(key="user_email")],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("exit")]
@@ -79,7 +147,7 @@ class GuiHandler:
         failed_gui_layout = [
             [sg.Text("Could not reconcile the given destination choice:")],
             [sg.Text(fail_path)],
-            [sg.Text("Reason for not being able to movve file to selected destination:")],
+            [sg.Text("Reason for not being able to move file to selected destination:")],
             [sg.Text(fail_reason)],
             [sg.Button("Back"), sg.Button("Exit")]
         ]
@@ -96,9 +164,35 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def __init__(self, location_path: str, project: str, destination_dir: str, destination_path: str,
-                 new_filename: str, notes: str):
-        pass
+    def __init__(self, current_location_path: str, project: str,  destination_path: str,
+                 new_filename: str, notes: str, destination_dir: str = None):
+        self.current_location = current_location_path
+        self.project_number = project
+        self.destination_dir = destination_dir
+        self.new_filename = new_filename
+        self.notes = notes #TODO maybe this should be part of archiver class
+        self.destination_path = destination_path
+
+    def archive(self):
+        while not self.destination_path:
+            pass
+
+    def get_destination_path(self):
+        while not self.destination_path:
+
+            #
+
+            project_root_dir_prefix = ArchiverHelpers.prefix_from_project_number(self.project_number)
+            root_directories_list = os.listdir(RECORDS_SERVER_LOCATION)
+            matching_root_dirs = [dir_name for dir_name in root_directories_list if dir_name.lower().startswith(project_root_dir_prefix)]
+            if len(matching_root_dirs) != 1:
+                logging.exception(f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for {self.project_number}", exc_info= True)
+                return
+
+            new_path = os.path.join(RECORDS_SERVER_LOCATION, matching_root_dirs[0])
+            original_construction_num = self.project_number.
+
+
 
 
 
@@ -114,6 +208,9 @@ class Archiver:
             try:
                 os.mkdir(archiving_directory)
             except Exception as e:
+                print(e)
+                print(f"error from trying to make {archiving_directory}")
+
 
         self.archiving_data_path = archiving_data_path
         self.records_drive_path = records_drive_path
@@ -127,7 +224,7 @@ class Archiver:
     def retrieve_archiver_email(self):
 
         welcome_window_layout = self.gui.welcome_layout()
-        welcome_window_results = self.gui.make_window(welcome_window_layout,"Welcome!")
+        welcome_window_results = self.gui.make_window("Welcome!", welcome_window_layout)
 
         #if the user clicks exit, shutdown app
         if welcome_window_results["Button Event"].lower() == "exit":
@@ -155,8 +252,8 @@ class Archiver:
         destination_window_layout = self.gui.choose_destination_layout(dir_choices= DIRECTORY_CHOICES,
                                                                        default_project_num= default_proj_number,
                                                                        file_exists_to_archive= file_exists)
-        destination_gui_results = self.gui.make_window(window_layout= destination_window_layout,
-                                                       window_name= "Enter file and destination info.")
+        destination_gui_results = self.gui.make_window(window_name= "Enter file and destination info.",
+                                                       window_layout= destination_window_layout)
 
         if destination_gui_results["Button Event"].lower() == "exit":
             self.exit_app()
@@ -171,10 +268,16 @@ class Archiver:
             if not project_num:
                 project_num = default_proj_number
 
+            directory_choice = destination_gui_results["Directory Choice"]
+            manual_archived_path = destination_gui_results["Manual Path"]
+            self.file_to_archive = ArchivalFile(current_location_path= self.archiving_directory,
+                                                project= project_num,
+                                                destination_dir= directory_choice,
+                                                destination_path=manual_archived_path)
+        return self.file_to_archive
 
-            return ""
-
-
+    def confirm_file_destination(self):
+        pass
 
 
 
@@ -182,3 +285,19 @@ class Archiver:
     @staticmethod
     def exit_app():
         exit()
+
+
+def main():
+    window_test = GuiHandler()
+    #welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
+    dest_layout = window_test.choose_destination_layout(dir_choices= DIRECTORY_CHOICES, default_project_num= "3238",
+                                                        file_exists_to_archive= True)
+    dest_results = window_test.make_window("Choose a file destination.", dest_layout)
+    fail_reason = "Could not find necessary sub-directories to reconcile desired destination path."
+    window_test.make_window("Could not archive file in desired destination.",
+                            window_layout= window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
+
+
+
+if __name__ == "__main__":
+    main()
