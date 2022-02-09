@@ -5,10 +5,10 @@ import PySimpleGUI as sg
 
 from collections import defaultdict
 
-#Typing Aliases
+# Typing Aliases
 
 
-#Environmental Variables
+# Environmental Variables
 RECORDS_SERVER_LOCATION = r"""R:\\"""
 FILENAMES_TO_IGNORE = ["desktop.ini"]
 DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 'C - Consultants',
@@ -57,6 +57,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits', 'G6 - UCSC Memoranda',
                      'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
                      'G8 - Testing and Inspection Reports. Geotechnical Engineer']
+
 
 class ArchiverHelpers:
 
@@ -121,7 +122,7 @@ class GuiHandler:
     def choose_destination_layout(self, dir_choices: list[str], default_project_num: str = None,
                                   file_exists_to_archive: bool = False):
         dir_choices.sort()
-        #TODO try auto_size_text and expand_y
+        # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
         listbox_height = 36
 
@@ -129,8 +130,10 @@ class GuiHandler:
                                   [sg.Text("Project Number (Leave Blank to use Default.):"),
                                    sg.Input(key="New Project Number")],
                                   [sg.Text("Choose Directory to for file:"),
-                                   sg.Listbox(values= dir_choices, key= "Directory Choice", size=(listbox_width, listbox_height))],
-                                  [sg.Text("Alternatively, Enter the full path to directory where the file has been archived:")],
+                                   sg.Listbox(values=dir_choices, key="Directory Choice",
+                                              size=(listbox_width, listbox_height))],
+                                  [sg.Text(
+                                      "Alternatively, Enter the full path to directory where the file has been archived:")],
                                   [sg.Input(key="Manual Path")]]
         if not file_exists_to_archive:
             destination_gui_layout.append([sg.Text("No file available to archive. Add a file before clicking 'Ok'.")])
@@ -139,14 +142,14 @@ class GuiHandler:
         return destination_gui_layout
 
     def confirmation_layout(self):
-        #TODO make this window. Should it have
+        # TODO make this window. Should it have
         confirmation_gui_layout = [
             [sg.Text("Personal email address:"), sg.Input(key="user_email")],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("exit")]
         ]
         return confirmation_gui_layout
 
-    def failed_destination_layout(self,  fail_reason: str, fail_path: str):
+    def failed_destination_layout(self, fail_reason: str, fail_path: str):
         failed_gui_layout = [
             [sg.Text("Could not reconcile the given destination choice:")],
             [sg.Text(fail_path)],
@@ -159,7 +162,7 @@ class GuiHandler:
     def error_message_layout(self, error_message: str):
         error_gui_layout = [
             [sg.Text("Oops, an error occured:")],
-            [ sg.Text(error_message)],
+            [sg.Text(error_message)],
             [sg.Button("Back"), sg.Button("Exit")]
         ]
         return error_gui_layout
@@ -167,13 +170,13 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def __init__(self, current_location_path: str, project: str,  destination_path: str,
+    def __init__(self, current_location_path: str, project: str, destination_path: str,
                  new_filename: str, notes: str, destination_dir: str = None):
         self.current_path = current_location_path
         self.project_number = project
         self.destination_dir = destination_dir
         self.new_filename = new_filename
-        self.notes = notes #TODO maybe this should be part of archiver class
+        self.notes = notes  # TODO maybe this should be part of archiver class
         self.destination_path = destination_path
 
     def archive(self):
@@ -200,13 +203,12 @@ class ArchivalFile:
         destination_filename = ".".join(split_filename)
         return destination_filename
 
-
     def nested_large_template_destination_dir(self):
         """
         eg  "E - Program and Design\E5 - Correspondence"
         :return:
         """
-        #TODO
+        # TODO
         pass
 
     def get_destination_path(self):
@@ -220,39 +222,95 @@ class ArchivalFile:
         ...unless there is already a path in destination_path attribute, in which case that will be returned
         :return:
         """
-        def after_proj_num_dir_found(proj_num_path):
-            "steps for trying to build a path to  "
 
+        def path_from_project_num_dir_to_destination(path_to_project_num_dir: str, large_template_destination: str,
+                                                     destination_filename: str):
+            """
+            Sub-routine for constructing the remainder of the destintaion path after building the path up to the
+            directory corresponding to the archive file project number.
 
-            new_path = proj_num_path
-            latest_path_dirs = [dir_name for dir_name in os.listdir(proj_num_path) if not os.path.isfile(os.path.join(proj_num_path, dir_name))]
-            nested_desired_dir = self.nested_large_template_destination_dir()
-            destination_dir_prefix = self.destination_dir.split(" ")[0] + " - " #eg "F5 - ", "G12 - ", "H - ", etc
-            destination_dir_parent_dir = ArchiverHelpers.split_path(nested_desired_dir)[0]
+            :param path_to_project_num_dir: path thus constructed to the directory corresponding to the archive file
+            project number
+            :param large_template_destination: given by ArchivalFile.nested_large_template_destination_dir()
+            :param destination_filename: given by ArchivalFile.get_destination_filename()
+            :return: string final destination path
+            """
 
-            #if the destination_dir has a project template dir parent we need to first try looking for that.
-            if not destination_dir_parent_dir == nested_desired_dir:
-                destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[0] + " - " #eg "F - ", "G - ", etc
-                parent_dirs = [dir_name for dir_name in  latest_path_dirs if dir_name.upper().startswith(destination_dir_parent_dir_prefix)]
+            new_path = path_to_project_num_dir
+
+            # if the path to the dir corresponding to the project number doesn't exist, just return the completed
+            # destination filepath
+            if not os.path.exists(new_path):
+                new_path = os.path.join(new_path, large_template_destination)
+                return os.path.join(new_path, destination_filename)
+
+            new_path_dirs = [dir_name for dir_name in os.listdir(new_path) if
+                             not os.path.isfile(os.path.join(new_path, dir_name))]
+            destination_dir = ArchiverHelpers.split_path(large_template_destination)[-1]
+            destination_dir_prefix = destination_dir.split(" ")[0] + " - "  # eg "F5 - ", "G12 - ", "H - ", etc
+            destination_dir_parent_dir = ArchiverHelpers.split_path(large_template_destination)[0]
+
+            # if the destination_dir has a project large template dir parent we need to first try looking for that.
+            if not destination_dir_parent_dir == large_template_destination:
+                # need to extrapolate the parent directory prefix given the desired destination directory. eg for
+                # destination "F5 - Drawings and Specifications" the parent directory prefix is "F - "
+                destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[
+                                                        0] + " - "  # eg "F - ", "G - ", etc
+                parent_dirs = [dir_name for dir_name in new_path_dirs if
+                               dir_name.upper().startswith(destination_dir_parent_dir_prefix)]
                 if len(parent_dirs) > 0:
-                    #TODO cause we're lazy we'll just assume parent_dirs is only len = 1. Maybe should handle other situations
+                    # TODO cause we're lazy we'll just assume parent_dirs is only len = 1. Maybe should handle other situations?
                     new_path = os.path.join(new_path, parent_dirs[0])
-                    #TODO search new path for desired destination directory
+                    new_path_dirs = [dir_name for dir_name in os.listdir(new_path) if
+                                     not os.path.isfile(os.path.join(new_path, dir_name))]
+                    existing_destination_dirs = [dir_name for dir_name in new_path_dirs if
+                                                 dir_name.upper().startswith(destination_dir_prefix)]
+                    if existing_destination_dirs:
+                        # again, assuming only one dir matches the destination dir prefix:
+                        new_path = os.path.join(new_path, existing_destination_dirs[0])
 
+                    else:
+                        new_path = os.path.join(new_path, destination_dir)
 
-            #if no parent dir look for desired destination dir
-            destination_dirs =
+                # if there is no directory in the destination project folder that corresponds to the parent directory of
+                # destination directory in a large template path...
+                else:
+                    # check for existing equivalents of destination directory
+                    new_path_dirs = [dir_name for dir_name in os.listdir(new_path) if
+                                     not os.path.isfile(os.path.join(new_path, dir_name))]
+                    existing_destination_dirs = [dir_name for dir_name in new_path_dirs if
+                                                 dir_name.upper().startswith(destination_dir_prefix)]
+                    if existing_destination_dirs:
+                        new_path = os.path.join(new_path, existing_destination_dirs[0])
+                    else:
+                        new_path = os.path.join(new_path, large_template_destination)
 
+            # if the destination_dir doesn't have a project template dir parent...
+            else:
+                new_path_dirs = [dir_name for dir_name in os.listdir(new_path) if
+                                 not os.path.isfile(os.path.join(new_path, dir_name))]
+                existing_destination_dirs = [dir_name for dir_name in new_path_dirs if
+                                             dir_name.upper().startswith(destination_dir_prefix)]
+                if existing_destination_dirs:
+                    new_path = os.path.join(new_path, existing_destination_dirs[0])
+                else:
+                    new_path = os.path.join(new_path, destination_dir)
+
+            return os.path.join(new_path, destination_filename)
 
         if not self.destination_path:
 
             # sept
             xx_level_dir_prefix, project_num_prefix = ArchiverHelpers.prefixes_from_project_number(self.project_number)
             root_directories_list = os.listdir(RECORDS_SERVER_LOCATION)
-            matching_root_dirs = [dir_name for dir_name in root_directories_list if dir_name.lower().startswith(xx_level_dir_prefix)]
+            matching_root_dirs = [dir_name for dir_name in root_directories_list if
+                                  dir_name.lower().startswith(xx_level_dir_prefix)]
+
             # if we have more than one matching root dir we throw an error
             if len(matching_root_dirs) != 1:
-                logging.exception(f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for project number {self.project_number}", exc_info= True)
+                logging.exception(
+                    f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for project number {self.project_number}",
+                    exc_info=True)
                 return ''
 
             new_path = os.path.join(RECORDS_SERVER_LOCATION, matching_root_dirs[0])
@@ -260,10 +318,11 @@ class ArchivalFile:
             xx_dir_dirs = [thing for thing in os.listdir(new_path) if not os.path.isfile(os.path.join(new_path, thing))]
 
             # lambda functions that check a directory name starts with either project number or prefix respectively
-            proj_num_in_dir_name = lambda dir_name : self.project_number == dir_name.split(" ")[0]
-            prefix_in_dir_name = lambda dir_name : project_num_prefix == dir_name.split(" ")[0]
+            proj_num_in_dir_name = lambda dir_name: self.project_number == dir_name.split(" ")[0]
+            prefix_in_dir_name = lambda dir_name: project_num_prefix == dir_name.split(" ")[0]
             dirs_matching_proj_num = [dir_name for dir_name in xx_dir_dirs if proj_num_in_dir_name(dir_name)]
-            #if more than one directory starts with the same project number
+
+            # if more than one directory starts with the same project number...
             if len(dirs_matching_proj_num) > 1:
                 logging.exception(
                     f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
@@ -278,7 +337,7 @@ class ArchivalFile:
                         exc_info=True)
                     return ''
 
-                #if there is now project number or prefix directory at the 'xx' level, it will need to be made
+                # if there is now project number or prefix directory at the 'xx' level, it will need to be made
                 if len(dirs_matching_prefix) == 0:
                     new_path = os.path.join(new_path, project_num_prefix)
                     new_path = os.path.join(new_path, self.project_number)
@@ -287,37 +346,41 @@ class ArchivalFile:
                     self.destination_path = new_path
                     return new_path
 
-                # if a dir exists that does begin with the prefix, we'll add it to our path and look again for
-                # directories that begin with the project number or prefix
-                new_path = os.path.join(new_path, dirs_matching_prefix[0])
-                prefix_dir_dirs = os.listdir(new_path)
-                dirs_matching_proj_num = [dir_name for dir_name in prefix_dir_dirs if proj_num_in_dir_name(dir_name)]
-                if len(dirs_matching_proj_num) > 1:
-                    logging.exception(
-                        f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
-                        exc_info=True)
-                    return ''
+                if len(dirs_matching_prefix) == 1:
+                    # if a dir exists that does begin with the prefix, we'll add it to our path and look again for
+                    # directories that begin with the project number #TODO ..and prefix?
 
-                if len(dirs_matching_proj_num) == 0:
-                    dirs_matching_prefix = [dir_name for dir_name in prefix_dir_dirs if prefix_in_dir_name(dir_name)]
-                    if len(dirs_matching_prefix) > 1:
+                    new_path = os.path.join(new_path, dirs_matching_prefix[0])
+                    prefix_dir_dirs = os.listdir(new_path)
+                    dirs_matching_proj_num = [dir_name for dir_name in prefix_dir_dirs if
+                                              proj_num_in_dir_name(dir_name)]
+                    if len(dirs_matching_proj_num) > 1:
                         logging.exception(
-                            f"{len(dirs_matching_prefix)} matching directories in {new_path} for prefix for project number {self.project_number}; expected 0 or 1.",
+                            f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
                             exc_info=True)
                         return ''
 
-                    if len(dirs_matching_prefix) == 0:
-                        new_path = os.path.join(new_path, self.project_number)
-                        new_path = os.path.join(new_path, self.nested_large_template_destination_dir())
-                        new_path = os.path.join(new_path, self.get_destination_filename())
-                        self.destination_path = new_path
-                        return new_path
+                if len(dirs_matching_proj_num) == 0:
+                    new_path = os.path.join(new_path, self.project_number)
+                    new_path = path_from_project_num_dir_to_destination(new_path,
+                                                                        self.nested_large_template_destination_dir(),
+                                                                        self.get_destination_filename())
+                if len(dirs_matching_proj_num) == 1:
+                    new_path = os.path.join(new_path, dirs_matching_proj_num[0])
+                    new_path = path_from_project_num_dir_to_destination(new_path,
+                                                                        self.nested_large_template_destination_dir(),
+                                                                        self.get_destination_filename())
 
-                    #if
-
+            # if we do find a dir that corresponds with the project number...
             if len(dirs_matching_proj_num) == 1:
-                #TODO
+                new_path = os.path.join(new_path, dirs_matching_proj_num[0])
+                new_path = path_from_project_num_dir_to_destination(new_path,
+                                                                    self.nested_large_template_destination_dir(),
+                                                                    self.get_destination_filename())
 
+            self.destination_path = new_path
+
+        return self.destination_path
 
 
 class Archiver:
@@ -325,7 +388,8 @@ class Archiver:
 
     """
 
-    def __init__(self, archiving_directory: str, archiving_data_path: str, records_drive_path: str):
+    def __init__(self, archiving_directory: str, archiving_data_path: str, records_drive_path: str,
+                 file_to_archive: ArchivalFile = None):
 
         self.archiving_directory = archiving_directory
         if not os.path.exists(archiving_directory):
@@ -335,14 +399,13 @@ class Archiver:
                 print(e)
                 print(f"error from trying to make {archiving_directory}")
 
-
         self.archiving_data_path = archiving_data_path
         self.records_drive_path = records_drive_path
         self.gui = GuiHandler()
+        self.file_to_archive = file_to_archive
         self.archiver_email = None
         self.archive_data = defaultdict(None, {})
         self.default_project_number = None
-        self.file_to_archive = None
 
 
     def retrieve_archiver_email(self):
@@ -350,7 +413,7 @@ class Archiver:
         welcome_window_layout = self.gui.welcome_layout()
         welcome_window_results = self.gui.make_window("Welcome!", welcome_window_layout)
 
-        #if the user clicks exit, shutdown app
+        # if the user clicks exit, shutdown app
         if welcome_window_results["Button Event"].lower() == "exit":
             self.exit_app()
         else:
@@ -358,8 +421,7 @@ class Archiver:
             self.archive_data["Archiver Email"] = welcome_window_results["Archiver Email"]
             return
 
-
-    def files_to_archive(self, archiver_dir_path = None):
+    def files_to_archive(self, archiver_dir_path=None):
         if self.archiving_directory and not archiver_dir_path:
             archiver_dir_path = self.archiving_directory
         files = [os.path.join(archiver_dir_path, file) for file in os.listdir(archiver_dir_path) if
@@ -373,11 +435,11 @@ class Archiver:
         default_proj_number = ""
         if self.default_project_number:
             default_proj_number = self.default_project_number
-        destination_window_layout = self.gui.choose_destination_layout(dir_choices= DIRECTORY_CHOICES,
-                                                                       default_project_num= default_proj_number,
-                                                                       file_exists_to_archive= file_exists)
-        destination_gui_results = self.gui.make_window(window_name= "Enter file and destination info.",
-                                                       window_layout= destination_window_layout)
+        destination_window_layout = self.gui.choose_destination_layout(dir_choices=DIRECTORY_CHOICES,
+                                                                       default_project_num=default_proj_number,
+                                                                       file_exists_to_archive=file_exists)
+        destination_gui_results = self.gui.make_window(window_name="Enter file and destination info.",
+                                                       window_layout=destination_window_layout)
 
         if destination_gui_results["Button Event"].lower() == "exit":
             self.exit_app()
@@ -394,15 +456,19 @@ class Archiver:
 
             directory_choice = destination_gui_results["Directory Choice"]
             manual_archived_path = destination_gui_results["Manual Path"]
-            self.file_to_archive = ArchivalFile(current_location_path= self.archiving_directory,
-                                                project= project_num,
-                                                destination_dir= directory_choice,
+            self.file_to_archive = ArchivalFile(current_location_path=self.archiving_directory,
+                                                project=project_num,
+                                                destination_dir=directory_choice,
                                                 destination_path=manual_archived_path)
         return self.file_to_archive
 
     def confirm_file_destination(self):
-        pass
-
+        file_destination = ""
+        try:
+            file_destination = self.file_to_archive.get_destination_path()
+            self.gui
+        except Exception as e:
+            pass
 
     @staticmethod
     def exit_app():
@@ -411,14 +477,13 @@ class Archiver:
 
 def test_gui():
     window_test = GuiHandler()
-    #welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
-    dest_layout = window_test.choose_destination_layout(dir_choices= DIRECTORY_CHOICES, default_project_num= "3238",
-                                                        file_exists_to_archive= True)
+    # welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
+    dest_layout = window_test.choose_destination_layout(dir_choices=DIRECTORY_CHOICES, default_project_num="3238",
+                                                        file_exists_to_archive=True)
     dest_results = window_test.make_window("Choose a file destination.", dest_layout)
     fail_reason = "Could not find necessary sub-directories to reconcile desired destination path."
     window_test.make_window("Could not archive file in desired destination.",
-                            window_layout= window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
-
+                            window_layout=window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
 
 
 if __name__ == "__main__":
