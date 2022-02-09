@@ -5,6 +5,9 @@ import PySimpleGUI as sg
 
 from collections import defaultdict
 
+#Typing Aliases
+
+
 #Environmental Variables
 RECORDS_SERVER_LOCATION = r"""R:\\"""
 FILENAMES_TO_IGNORE = ["desktop.ini"]
@@ -75,7 +78,7 @@ class ArchiverHelpers:
         return allparts
 
     @staticmethod
-    def prefix_from_project_number(project_no: str):
+    def prefixes_from_project_number(project_no: str):
         """
         returns root directory prefix for given project number.
         eg project number 10638 returns 106xx, project number 9805A returns 98xx
@@ -87,7 +90,7 @@ class ArchiverHelpers:
         prefix = project_no[:3]
         if len(project_no) <= 4:
             prefix = project_no[:2]
-        return prefix + 'xx'
+        return (prefix + 'xx', project_no)
 
 
 class GuiHandler:
@@ -166,7 +169,7 @@ class ArchivalFile:
 
     def __init__(self, current_location_path: str, project: str,  destination_path: str,
                  new_filename: str, notes: str, destination_dir: str = None):
-        self.current_location = current_location_path
+        self.current_path = current_location_path
         self.project_number = project
         self.destination_dir = destination_dir
         self.new_filename = new_filename
@@ -177,22 +180,143 @@ class ArchivalFile:
         while not self.destination_path:
             pass
 
+    def get_destination_filename(self):
+        """
+        returns the resulting anticipated filename from an anticipated archival process. Handles extensions by copying
+        them from current filename to desired new filename
+        :return:
+        """
+        current_filename = ArchiverHelpers.split_path(self.current_path)[-1]
+        if not self.new_filename:
+            return current_filename
+
+        extension = current_filename.split(".")[-1]
+        destination_filename = self.new_filename
+        split_filename = self.new_filename.split(".")
+        if split_filename[-1] == extension:
+            return destination_filename
+
+        split_filename.append(extension)
+        destination_filename = ".".join(split_filename)
+        return destination_filename
+
+
+    def nested_large_template_destination_dir(self):
+        """
+        eg  "E - Program and Design\E5 - Correspondence"
+        :return:
+        """
+        #TODO
+        pass
+
     def get_destination_path(self):
-        while not self.destination_path:
+        """
+        Major function that builds a plausible path string in the following steps:
+        Step 1: Looks for xx directory in root (RECORDS_SERVER_LOCATION) and adds to path
+        Step 2: Looks through next two levels in directory hierarchy for directories that start with the project number
+            or a project number prefix and add them to the path.
+        Step 3: Looks for desired directory location in nested levels and adds it to new path
 
-            #
+        ...unless there is already a path in destination_path attribute, in which case that will be returned
+        :return:
+        """
+        def after_proj_num_dir_found(proj_num_path):
+            "steps for trying to build a path to  "
 
-            project_root_dir_prefix = ArchiverHelpers.prefix_from_project_number(self.project_number)
+
+            new_path = proj_num_path
+            latest_path_dirs = [dir_name for dir_name in os.listdir(proj_num_path) if not os.path.isfile(os.path.join(proj_num_path, dir_name))]
+            nested_desired_dir = self.nested_large_template_destination_dir()
+            destination_dir_prefix = self.destination_dir.split(" ")[0] + " - " #eg "F5 - ", "G12 - ", "H - ", etc
+            destination_dir_parent_dir = ArchiverHelpers.split_path(nested_desired_dir)[0]
+
+            #if the destination_dir has a project template dir parent we need to first try looking for that.
+            if not destination_dir_parent_dir == nested_desired_dir:
+                destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[0] + " - " #eg "F - ", "G - ", etc
+                parent_dirs = [dir_name for dir_name in  latest_path_dirs if dir_name.upper().startswith(destination_dir_parent_dir_prefix)]
+                if len(parent_dirs) > 0:
+                    #TODO cause we're lazy we'll just assume parent_dirs is only len = 1. Maybe should handle other situations
+                    new_path = os.path.join(new_path, parent_dirs[0])
+                    #TODO search new path for desired destination directory
+
+
+            #if no parent dir look for desired destination dir
+            destination_dirs =
+
+
+        if not self.destination_path:
+
+            # sept
+            xx_level_dir_prefix, project_num_prefix = ArchiverHelpers.prefixes_from_project_number(self.project_number)
             root_directories_list = os.listdir(RECORDS_SERVER_LOCATION)
-            matching_root_dirs = [dir_name for dir_name in root_directories_list if dir_name.lower().startswith(project_root_dir_prefix)]
+            matching_root_dirs = [dir_name for dir_name in root_directories_list if dir_name.lower().startswith(xx_level_dir_prefix)]
+            # if we have more than one matching root dir we throw an error
             if len(matching_root_dirs) != 1:
-                logging.exception(f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for {self.project_number}", exc_info= True)
-                return
+                logging.exception(f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for project number {self.project_number}", exc_info= True)
+                return ''
 
             new_path = os.path.join(RECORDS_SERVER_LOCATION, matching_root_dirs[0])
-            original_construction_num = self.project_number.
+            # list of contents of xx level directory which are not files (ie directories in xx level directory)
+            xx_dir_dirs = [thing for thing in os.listdir(new_path) if not os.path.isfile(os.path.join(new_path, thing))]
 
+            # lambda functions that check a directory name starts with either project number or prefix respectively
+            proj_num_in_dir_name = lambda dir_name : self.project_number == dir_name.split(" ")[0]
+            prefix_in_dir_name = lambda dir_name : project_num_prefix == dir_name.split(" ")[0]
+            dirs_matching_proj_num = [dir_name for dir_name in xx_dir_dirs if proj_num_in_dir_name(dir_name)]
+            #if more than one directory starts with the same project number
+            if len(dirs_matching_proj_num) > 1:
+                logging.exception(
+                    f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
+                    exc_info=True)
+                return ''
 
+            if len(dirs_matching_proj_num) == 0:
+                dirs_matching_prefix = [dir_name for dir_name in xx_dir_dirs if prefix_in_dir_name(dir_name)]
+                if len(dirs_matching_prefix) > 1:
+                    logging.exception(
+                        f"{len(dirs_matching_prefix)} matching directories in {new_path} for prefix for project number {self.project_number}; expected 0 or 1.",
+                        exc_info=True)
+                    return ''
+
+                #if there is now project number or prefix directory at the 'xx' level, it will need to be made
+                if len(dirs_matching_prefix) == 0:
+                    new_path = os.path.join(new_path, project_num_prefix)
+                    new_path = os.path.join(new_path, self.project_number)
+                    new_path = os.path.join(new_path, self.nested_large_template_destination_dir())
+                    new_path = os.path.join(new_path, self.get_destination_filename())
+                    self.destination_path = new_path
+                    return new_path
+
+                # if a dir exists that does begin with the prefix, we'll add it to our path and look again for
+                # directories that begin with the project number or prefix
+                new_path = os.path.join(new_path, dirs_matching_prefix[0])
+                prefix_dir_dirs = os.listdir(new_path)
+                dirs_matching_proj_num = [dir_name for dir_name in prefix_dir_dirs if proj_num_in_dir_name(dir_name)]
+                if len(dirs_matching_proj_num) > 1:
+                    logging.exception(
+                        f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
+                        exc_info=True)
+                    return ''
+
+                if len(dirs_matching_proj_num) == 0:
+                    dirs_matching_prefix = [dir_name for dir_name in prefix_dir_dirs if prefix_in_dir_name(dir_name)]
+                    if len(dirs_matching_prefix) > 1:
+                        logging.exception(
+                            f"{len(dirs_matching_prefix)} matching directories in {new_path} for prefix for project number {self.project_number}; expected 0 or 1.",
+                            exc_info=True)
+                        return ''
+
+                    if len(dirs_matching_prefix) == 0:
+                        new_path = os.path.join(new_path, self.project_number)
+                        new_path = os.path.join(new_path, self.nested_large_template_destination_dir())
+                        new_path = os.path.join(new_path, self.get_destination_filename())
+                        self.destination_path = new_path
+                        return new_path
+
+                    #if
+
+            if len(dirs_matching_proj_num) == 1:
+                #TODO
 
 
 
@@ -280,14 +404,12 @@ class Archiver:
         pass
 
 
-
-
     @staticmethod
     def exit_app():
         exit()
 
 
-def main():
+def test_gui():
     window_test = GuiHandler()
     #welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
     dest_layout = window_test.choose_destination_layout(dir_choices= DIRECTORY_CHOICES, default_project_num= "3238",
@@ -300,4 +422,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    test_gui()
