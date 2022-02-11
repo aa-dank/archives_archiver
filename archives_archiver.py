@@ -279,13 +279,14 @@ class ArchivalFile:
             destination_dir_prefix = destination_dir.split(" ")[0] + " - "  # eg "F5 - ", "G12 - ", "H - ", etc
             destination_dir_parent_dir = ArchiverHelpers.split_path(large_template_destination)[0]
 
-            # if the destination_dir has a project large template dir parent we need to first try looking for that.
+            # if the destination directory is a large template parent director (or a a small template directory)...
             if not destination_dir_parent_dir == large_template_destination:
+
                 # need to extrapolate the parent directory prefix given the desired destination directory. eg for
                 # destination "F5 - Drawings and Specifications" the parent directory prefix is "F - "
                 destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[0] + " - "  # eg "F - ", "G - ", etc
                 parent_dirs = [dir_name for dir_name in new_path_dirs if
-                               dir_name.upper().startswith(destination_dir_parent_dir_prefix)]
+                               dir_name.upper().startswith(destination_dir_parent_dir_prefix.upper())]
                 if len(parent_dirs) > 0:
                     # TODO cause we're lazy we'll just assume parent_dirs is only len = 1. Maybe should handle other situations?
                     new_path = os.path.join(new_path, parent_dirs[0])
@@ -310,18 +311,30 @@ class ArchivalFile:
                     if existing_destination_dirs:
                         new_path = os.path.join(new_path, existing_destination_dirs[0])
                     else:
-                        new_path = os.path.join(new_path, large_template_destination)
+                        project_num_dirs = [dir for dir in new_path_dirs if dir.lower().startswith(self.project_number)]
+                        if not project_num_dirs:
+                            new_path = os.path.join(new_path, large_template_destination)
+                        else:
+                            new_path = os.path.join(new_path, project_num_dirs[0])
+                            new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir= new_path,
+                                                                                large_template_destination= large_template_destination,
+                                                                                destination_filename= destination_filename)
 
             # if the destination_dir doesn't have a project template dir parent...
             else:
-                new_path_dirs = [dir_name for dir_name in os.listdir(new_path) if
-                                 not os.path.isfile(os.path.join(new_path, dir_name))]
                 existing_destination_dirs = [dir_name for dir_name in new_path_dirs if
                                              dir_name.upper().startswith(destination_dir_prefix)]
                 if existing_destination_dirs:
                     new_path = os.path.join(new_path, existing_destination_dirs[0])
                 else:
-                    new_path = os.path.join(new_path, destination_dir)
+                    file_num_dirs = [dir for dir in new_path_dirs if
+                                     dir.lower().startswith(self.project_number.lower())]
+                    if not file_num_dirs:
+                        new_path = os.path.join(new_path, large_template_destination)
+                    else:
+                        new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir=new_path,
+                                                                            large_template_destination=large_template_destination,
+                                                                            destination_filename=destination_filename)
 
             return os.path.join(new_path, destination_filename)
 
@@ -515,12 +528,13 @@ def test_gui():
 
 
 def test_assemble_destination_path():
-    project = '5800-001'
-    desired_destination = DIRECTORY_CHOICES[44]
+    project = '2700'
+    desired_destination = DIRECTORY_CHOICES[8]
     print(desired_destination)
+    new_filename = "2744.G19.Notice of Completion"
 
     location = os.path.join(os.getcwd(), "file_to_archive")
-    file = ArchivalFile(current_location_path=location, project=project, new_filename=None,
+    file = ArchivalFile(current_location_path=location, project=project, new_filename= new_filename,
                         destination_dir=desired_destination)
 
     dest_path = file.assemble_destination_path()
