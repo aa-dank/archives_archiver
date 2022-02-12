@@ -459,25 +459,24 @@ class ArchivalFile:
 
 class Archivist:
     """
-
+    Class for executing main archiving procedure
     """
 
-    def __init__(self, archiving_directory: str, archiving_data_path: str, records_drive_path: str,
+    def __init__(self, files_to_archive_directory: str, records_drive_path: str,
                  file_to_archive: ArchivalFile = None):
 
-        self.archiving_directory = archiving_directory
-        if not os.path.exists(archiving_directory):
+        self.files_to_archive_directory = files_to_archive_directory
+        if not os.path.exists(files_to_archive_directory):
             try:
-                os.mkdir(archiving_directory)
+                os.mkdir(files_to_archive_directory)
             except Exception as e:
                 print(e)
-                print(f"error from trying to make {archiving_directory}")
+                print(f"error from trying to make {files_to_archive_directory}")
 
-        self.archiving_data_path = archiving_data_path
         self.records_drive_path = records_drive_path
         self.gui = GuiHandler()
         self.file_to_archive = file_to_archive
-        self.archiver_email = None
+        self.email = None
         self.archive_data = defaultdict(None, {})
         self.default_project_number = None
 
@@ -491,22 +490,33 @@ class Archivist:
         if welcome_window_results["Button Event"].lower() == "exit":
             self.exit_app()
         else:
-            self.archiver_email = welcome_window_results["Archivist Email"]
+            self.email = welcome_window_results["Archivist Email"]
             self.archive_data["Archivist Email"] = welcome_window_results["Archivist Email"]
             return
 
     def files_to_archive(self, archiver_dir_path=None):
-        if self.archiving_directory and not archiver_dir_path:
-            archiver_dir_path = self.archiving_directory
+        """
+        return a list of paths to files to archive in the self.files_to_archive_directory or achiver_dir_path
+        :param archiver_dir_path: path to directory with files to archive
+        :return: List of filepaths
+        """
+        if self.files_to_archive_directory and not archiver_dir_path:
+            archiver_dir_path = self.files_to_archive_directory
+
+        if archiver_dir_path:
+            self.files_to_archive_directory = archiver_dir_path
+
         files = [os.path.join(archiver_dir_path, file) for file in os.listdir(archiver_dir_path) if
-                 not file in FILENAMES_TO_IGNORE]
-        files = [filepath for filepath in files if os.path.isfile(filepath)]
+                 not (file in FILENAMES_TO_IGNORE and os.path.isdir(os.path.join(archiver_dir_path, file)))]
         return files
 
     def elicit_destination_selection(self):
-
+        """
+        retrieves
+        :return:
+        """
         files_in_archiving_dir = self.files_to_archive()
-        file_exists = (len(files_in_archiving_dir) == 1)
+        file_exists = (len(files_in_archiving_dir) == 1) #TODO remove this and associated mechanisms
         default_proj_number = ""
         if self.default_project_number:
             default_proj_number = self.default_project_number
@@ -532,7 +542,7 @@ class Archivist:
             self.default_project_number = project_num
             directory_choice = destination_gui_results["Directory Choice"]
             manual_archived_path = destination_gui_results["Manual Path"]
-            self.file_to_archive = ArchivalFile(current_location_path=self.archiving_directory,
+            self.file_to_archive = ArchivalFile(current_location_path=self.files_to_archive_directory,
                                                 project=project_num,
                                                 destination_dir=directory_choice,
                                                 destination_path=manual_archived_path)
@@ -557,7 +567,11 @@ class Archivist:
     def add_to_csv(self, csv_path):
         pass
 
-
+    def elicit_files_to_archive(self):
+        while not self.files_to_archive():
+            no_file_error_message = f"No files to archive. Add files to" + os.linesep + f"{dir_of_files_to_archive}"
+            no_files_error_layout = self.gui.error_message_layout(no_file_error_message)
+            self.gui.make_window("Add files to Archive.", no_files_error_layout)
 
     @staticmethod
     def exit_app():
@@ -565,7 +579,18 @@ class Archivist:
 
 
 def main():
-    pass
+    dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
+    ppdo_archivist = Archivist(files_to_archive_directory= dir_of_files_to_archive,
+                               records_drive_path= RECORDS_SERVER_LOCATION)
+
+    ppdo_archivist.retrieve_email()
+    while True:
+        ppdo_archivist.elicit_files_to_archive()
+        to_archive_filepaths = ppdo_archivist.files_to_archive()
+        ppdo_archivist.elicit_destination_selection()
+        destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
+        if destination_confirmed:
+            ppdo_archivist.archive_file()
 
 
 
@@ -599,4 +624,4 @@ def test_assemble_destination_path():
 
 if __name__ == "__main__":
     # test_gui()
-    test_assemble_destination_path()
+    #test_assemble_destination_path()
