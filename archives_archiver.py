@@ -1,10 +1,11 @@
 import os
 import logging
+import shutil
 import pandas as pd
 import PySimpleGUI as sg
 
 from collections import defaultdict
-
+from datetime import datetime
 # Typing Aliases
 
 
@@ -103,6 +104,7 @@ class GuiHandler:
     def __init__(self):
         self.gui_theme = "DarkTeal6"
 
+
     def make_window(self, window_name: str, window_layout: list):
         sg.theme(self.gui_theme)
         # launch gui
@@ -112,21 +114,25 @@ class GuiHandler:
         dist_window.close()
         return defaultdict(None, values)
 
+
     def welcome_layout(self):
         welcome_gui_layout = [
-            [sg.Text("Personal email address:"), sg.Input(key="Archiver Email")],
+            [sg.Text("Email address:"), sg.Input(key="Archivist Email")],
             [sg.Button("Ok"), sg.Button("Exit")]
         ]
         return welcome_gui_layout
 
-    def destination_choice_layout(self, dir_choices: list[str], default_project_num: str = None,
+
+    def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None,
                                   file_exists_to_archive: bool = False):
         dir_choices.sort()
         # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
         listbox_height = 36
 
-        destination_gui_layout = [[sg.Text("Default Project:"), sg.Text(default_project_num)],
+        destination_gui_layout = [[sg.Text(f"Choose a destination location for {current_filename}",
+                                           auto_size_text= True, justification= 'center')],
+                                  [sg.Text("Default Project:"), sg.Text(default_project_num)],
                                   [sg.Text("Project Number (Leave Blank to use Default.):"),
                                    sg.Input(key="New Project Number")],
                                   [sg.Text("Choose Directory to for file:"),
@@ -141,13 +147,21 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self):
+
+    def confirmation_layout(self, destination_path):
         # TODO make this window. Should it have
+        treedata = sg.TreeData()
+
         confirmation_gui_layout = [
-            [sg.Text("Personal email address:"), sg.Input(key="user_email")],
+            [sg.Text("Confirm this is correct location for this file:")],
+            [sg.Text(destination_path)],
+            [sg.Text("Similar directories:")],
+            #[sg.Tree(data= treedata)],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("exit")]
         ]
+
         return confirmation_gui_layout
+
 
     def failed_destination_layout(self, fail_reason: str, fail_path: str):
         failed_gui_layout = [
@@ -158,6 +172,7 @@ class GuiHandler:
             [sg.Button("Back"), sg.Button("Exit")]
         ]
         return failed_gui_layout
+
 
     def error_message_layout(self, error_message: str):
         error_gui_layout = [
@@ -170,27 +185,25 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def __init__(self, current_location_path: str, project: str, destination_path: str = None, new_filename: str = None,
+    def __init__(self, current_path: str, project: str, destination_path: str = None, new_filename: str = None,
                  notes: str = None, destination_dir: str = None):
         """
 
-        :param current_location_path: path to directory containing file #TODO will need to change for multi-file functionality
+        :param current_path: path to  file
         :param project: project number string
         :param destination_path: the desired path for the file when tit is archived
         :param new_filename: optional file name for the destination file
         :param notes: for recording notes in the database
         :param destination_dir: chosen directory from the directory templates
         """
-        self.current_path = current_location_path
-        self.project_number = project
-        self.destination_dir = destination_dir
-        self.new_filename = new_filename
-        self.notes = notes  # TODO maybe this should be part of archiver class
-        self.destination_path = destination_path
+        self.current_path      = current_path
+        self.project_number    = project
+        self.destination_dir   = destination_dir
+        self.new_filename      = new_filename
+        self.notes             = notes
+        self.destination_path  = destination_path
+        self.datetime_archived = None
 
-    def archive(self):
-        while not self.destination_path:
-            pass
 
     def get_destination_filename(self):
         """
@@ -199,13 +212,7 @@ class ArchivalFile:
         :return:
         """
 
-        #subroutine check conents of the current location of the file for files that can be archived
-        is_archivable_file = lambda filename, dir_path: (os.path.isfile(os.path.join(dir_path, filename)) and (
-                len([file for file in FILENAMES_TO_IGNORE if file.lower() == filename.lower()]) == 0))
-
-        #we assume there is only one matching file
-        current_filename = [file for file in os.listdir(self.current_path) if
-                            is_archivable_file(file, self.current_path)][0]
+        current_filename = ArchiverHelpers.split_path(self.current_path)[-1]
 
         if not self.new_filename:
             return current_filename
@@ -425,7 +432,32 @@ class ArchivalFile:
         return self.destination_path
 
 
-class Archiver:
+    def archive(self, destination= None):
+
+        #if the file has already been archived return the destination path
+        if self.datetime_archived:
+            return self.destination_path
+
+        #process optional parameter destination
+        if destination:
+            if destination in DIRECTORY_CHOICES:
+                self.destination_dir = destination
+            else:
+                self.destination_path = destination
+
+        if not self.destination_path:
+            self.assemble_destination_path()
+
+        destination_path_list = ArchiverHelpers.split_path(self.destination_path)
+        destination_dir_path = os.path.join(**destination_path_list[:-1])
+
+        os.makedirs(destination_dir_path)
+        self.datetime_archived = datetime.now()
+        return  shutil.move(self.current_path, self.destination_path)
+
+
+
+class Archivist:
     """
 
     """
@@ -449,7 +481,8 @@ class Archiver:
         self.archive_data = defaultdict(None, {})
         self.default_project_number = None
 
-    def retrieve_archiver_email(self):
+
+    def retrieve_email(self):
 
         welcome_window_layout = self.gui.welcome_layout()
         welcome_window_results = self.gui.make_window("Welcome!", welcome_window_layout)
@@ -458,11 +491,11 @@ class Archiver:
         if welcome_window_results["Button Event"].lower() == "exit":
             self.exit_app()
         else:
-            self.archiver_email = welcome_window_results["Archiver Email"]
-            self.archive_data["Archiver Email"] = welcome_window_results["Archiver Email"]
+            self.archiver_email = welcome_window_results["Archivist Email"]
+            self.archive_data["Archivist Email"] = welcome_window_results["Archivist Email"]
             return
 
-    def files_to_archive(self, archiver_dir_path=None):  # TODO limit to single file?
+    def files_to_archive(self, archiver_dir_path=None):
         if self.archiving_directory and not archiver_dir_path:
             archiver_dir_path = self.archiving_directory
         files = [os.path.join(archiver_dir_path, file) for file in os.listdir(archiver_dir_path) if
@@ -472,7 +505,8 @@ class Archiver:
 
     def elicit_destination_selection(self):
 
-        file_exists = (len(self.files_to_archive()) == 1)
+        files_in_archiving_dir = self.files_to_archive()
+        file_exists = (len(files_in_archiving_dir) == 1)
         default_proj_number = ""
         if self.default_project_number:
             default_proj_number = self.default_project_number
@@ -495,6 +529,7 @@ class Archiver:
             if not project_num:
                 project_num = default_proj_number
 
+            self.default_project_number = project_num
             directory_choice = destination_gui_results["Directory Choice"]
             manual_archived_path = destination_gui_results["Manual Path"]
             self.file_to_archive = ArchivalFile(current_location_path=self.archiving_directory,
@@ -503,17 +538,38 @@ class Archiver:
                                                 destination_path=manual_archived_path)
         return self.file_to_archive
 
-    def confirm_file_destination(self):
-        file_destination = ""
-        try:
-            file_destination = self.file_to_archive.assemble_destination_path()
-            self.gui
-        except Exception as e:
-            pass
+    def confirmed_desired_file_destination(self):
+        """
+        spins up the confirmation screen gui and returns true if the desired path has been confirmed by the user.
+        This also will exit the program if the user selects the 'exit' button in the gui.
+        :return: bool value of whether to move the file_to_archive to the destination
+        """
+        file_destination = self.file_to_archive.assemble_destination_path()
+        confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination)
+        confirmation_gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
+        if confirmation_gui_results["Button Event"].lower() == "exit":
+            self.exit_app()
+        return confirmation_gui_results["Button Event"].lower() == "ok"
+
+    def archive_file(self):
+        self.file_to_archive.archive()
+
+    def add_to_csv(self, csv_path):
+        pass
+
+
 
     @staticmethod
     def exit_app():
         exit()
+
+
+def main():
+    pass
+
+
+
+
 
 
 def test_gui():
