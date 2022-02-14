@@ -27,6 +27,7 @@
 *.sqlite
 *.json
 *.pickle
+*.csv
 
 # OS generated files #
 ######################

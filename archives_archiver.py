@@ -6,12 +6,14 @@ import PySimpleGUI as sg
 
 from collections import defaultdict
 from datetime import datetime
+
+
 # Typing Aliases
 
 
 # Environmental Variables
 RECORDS_SERVER_LOCATION = r"""R:\\"""
-FILENAMES_TO_IGNORE = ["desktop.ini"]
+FILENAMES_TO_IGNORE = ["desktop.ini", "desktop.ini"]
 DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 'C - Consultants',
                      'D - Environmental Review Process', 'E - Program and Design',
                      'F - Bid Documents and Contract Award', 'G - Construction', "H - Submittals and O&M's",
@@ -123,12 +125,11 @@ class GuiHandler:
         return welcome_gui_layout
 
 
-    def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None,
-                                  file_exists_to_archive: bool = False):
+    def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None):
         dir_choices.sort()
         # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
-        listbox_height = 36
+        listbox_height = 20
 
         destination_gui_layout = [[sg.Text(f"Choose a destination location for {current_filename}",
                                            auto_size_text= True, justification= 'center')],
@@ -141,8 +142,6 @@ class GuiHandler:
                                   [sg.Text(
                                       "Alternatively, Enter the full path to directory where the file has been archived:")],
                                   [sg.Input(key="Manual Path")]]
-        if not file_exists_to_archive:
-            destination_gui_layout.append([sg.Text("No file available to archive. Add a file before clicking 'Ok'.")])
 
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
@@ -286,7 +285,7 @@ class ArchivalFile:
             destination_dir_prefix = destination_dir.split(" ")[0] + " - "  # eg "F5 - ", "G12 - ", "H - ", etc
             destination_dir_parent_dir = ArchiverHelpers.split_path(large_template_destination)[0]
 
-            # if the destination directory is a large template parent director (or a a small template directory)...
+            # if the destination directory is a large template child director...
             if not destination_dir_parent_dir == large_template_destination:
 
                 # need to extrapolate the parent directory prefix given the desired destination directory. eg for
@@ -339,7 +338,7 @@ class ArchivalFile:
                     if not file_num_dirs:
                         new_path = os.path.join(new_path, large_template_destination)
                     else:
-                        new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir=new_path,
+                        return path_from_project_num_dir_to_destination(path_to_project_num_dir=new_path,
                                                                             large_template_destination=large_template_destination,
                                                                             destination_filename=destination_filename)
 
@@ -431,6 +430,11 @@ class ArchivalFile:
 
         return self.destination_path
 
+    def attribute_defaultdict(self):
+        dict = {"time_archived": self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S"), "project_number": self.project_number,
+                "destination_path": self.destination_path, "destination_directory": self.destination_dir,
+                "notes": self.notes}
+        return defaultdict(None, dict)
 
     def archive(self, destination= None):
 
@@ -449,13 +453,24 @@ class ArchivalFile:
             self.assemble_destination_path()
 
         destination_path_list = ArchiverHelpers.split_path(self.destination_path)
-        destination_dir_path = os.path.join(**destination_path_list[:-1])
+        destination_dir_path = os.path.join(*destination_path_list[:-1])
 
         os.makedirs(destination_dir_path)
         self.datetime_archived = datetime.now()
         return  shutil.move(self.current_path, self.destination_path)
 
 
+class Researcher:
+
+    def __init__(self, research_cache_filepath):
+        self.research_cache_filepath = research_cache_filepath
+        pass
+
+    def similar_filename_paths(self):
+        pass
+
+    def destination_examples(self):
+        pass
 
 class Archivist:
     """
@@ -477,9 +492,19 @@ class Archivist:
         self.gui = GuiHandler()
         self.file_to_archive = file_to_archive
         self.email = None
-        self.archive_data = defaultdict(None, {})
         self.default_project_number = None
 
+    def display_error(self, error_message):
+        """
+
+        :param error_message:
+        :return: bool whether user hit 'ok' button or not
+        """
+        error_layout = self.gui.error_message_layout(error_message= error_message)
+        error_window_results = self.gui.make_window(window_name= "ERROR",window_layout= error_layout)
+        if error_window_results["Button Event"].lower() == "exit":
+            self.exit_app()
+        return error_window_results["Button Event"].lower() == "ok"
 
     def retrieve_email(self):
 
@@ -491,7 +516,6 @@ class Archivist:
             self.exit_app()
         else:
             self.email = welcome_window_results["Archivist Email"]
-            self.archive_data["Archivist Email"] = welcome_window_results["Archivist Email"]
             return
 
     def files_to_archive(self, archiver_dir_path=None):
@@ -507,7 +531,7 @@ class Archivist:
             self.files_to_archive_directory = archiver_dir_path
 
         files = [os.path.join(archiver_dir_path, file) for file in os.listdir(archiver_dir_path) if
-                 not (file in FILENAMES_TO_IGNORE and os.path.isdir(os.path.join(archiver_dir_path, file)))]
+                 not (file in FILENAMES_TO_IGNORE or os.path.isdir(os.path.join(archiver_dir_path, file)))]
         return files
 
     def elicit_destination_selection(self):
@@ -516,20 +540,22 @@ class Archivist:
         :return:
         """
         files_in_archiving_dir = self.files_to_archive()
-        file_exists = (len(files_in_archiving_dir) == 1) #TODO remove this and associated mechanisms
+        #
         default_proj_number = ""
         if self.default_project_number:
             default_proj_number = self.default_project_number
+
+        current_file = ArchiverHelpers.split_path(files_in_archiving_dir[0])[-1]
         destination_window_layout = self.gui.destination_choice_layout(dir_choices=DIRECTORY_CHOICES,
-                                                                       default_project_num=default_proj_number,
-                                                                       file_exists_to_archive=file_exists)
+                                                                       current_filename= current_file,
+                                                                       default_project_num=default_proj_number)
         destination_gui_results = self.gui.make_window(window_name="Enter file and destination info.",
                                                        window_layout=destination_window_layout)
 
         if destination_gui_results["Button Event"].lower() == "exit":
             self.exit_app()
-        if destination_gui_results["New Project Number"]:
-            self.default_project_number = destination_gui_results["New Project Number"]
+
+        self.default_project_number = destination_gui_results["New Project Number"]
 
         if destination_gui_results["Button Event"].lower() == "back":
             return ""
@@ -540,9 +566,11 @@ class Archivist:
                 project_num = default_proj_number
 
             self.default_project_number = project_num
-            directory_choice = destination_gui_results["Directory Choice"]
+
+            #TODO following line needs to be changed if the directory list item in gui layout changes
+            directory_choice = destination_gui_results["Directory Choice"][0]
             manual_archived_path = destination_gui_results["Manual Path"]
-            self.file_to_archive = ArchivalFile(current_location_path=self.files_to_archive_directory,
+            self.file_to_archive = ArchivalFile(current_path=files_in_archiving_dir[0],
                                                 project=project_num,
                                                 destination_dir=directory_choice,
                                                 destination_path=manual_archived_path)
@@ -564,14 +592,21 @@ class Archivist:
     def archive_file(self):
         self.file_to_archive.archive()
 
-    def add_to_csv(self, csv_path):
-        pass
+    def add_archived_file_to_csv(self, csv_path):
+        """
+
+        :param csv_path:
+        :return:
+        """
+        data_dict = self.file_to_archive.attribute_defaultdict()
+        data_dict["archiver_email"] = self.email
+        archived_file_df = pd.DataFrame(data_dict, index= [0,])
+        archived_file_df.to_csv(csv_path, mode='a', index=False, header=False)
 
     def elicit_files_to_archive(self):
         while not self.files_to_archive():
-            no_file_error_message = f"No files to archive. Add files to" + os.linesep + f"{dir_of_files_to_archive}"
-            no_files_error_layout = self.gui.error_message_layout(no_file_error_message)
-            self.gui.make_window("Add files to Archive.", no_files_error_layout)
+            no_file_error_message = f"No files to archive. Add files to" + os.linesep + f"{self.files_to_archive_directory}"
+            self.display_error(no_file_error_message)
 
     @staticmethod
     def exit_app():
@@ -579,6 +614,9 @@ class Archivist:
 
 
 def main():
+    csv_filename = "archived_files_archive.csv"
+    csv_filepath = os.path.join(os.getcwd(), csv_filename)
+
     dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
     ppdo_archivist = Archivist(files_to_archive_directory= dir_of_files_to_archive,
                                records_drive_path= RECORDS_SERVER_LOCATION)
@@ -586,11 +624,18 @@ def main():
     ppdo_archivist.retrieve_email()
     while True:
         ppdo_archivist.elicit_files_to_archive()
-        to_archive_filepaths = ppdo_archivist.files_to_archive()
         ppdo_archivist.elicit_destination_selection()
+
+        #if there is no default project number and no project number was entered, display error message and restart loop
+        if not ppdo_archivist.file_to_archive.project_number:
+            ppdo_archivist.display_error("No project number selected.")
+            continue
+
         destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
         if destination_confirmed:
             ppdo_archivist.archive_file()
+            ppdo_archivist.add_archived_file_to_csv(csv_filepath)
+        print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
 
@@ -608,6 +653,8 @@ def test_gui():
                             window_layout=window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
 
 
+
+
 def test_assemble_destination_path():
     project = '2700'
     desired_destination = DIRECTORY_CHOICES[8]
@@ -623,5 +670,6 @@ def test_assemble_destination_path():
 
 
 if __name__ == "__main__":
-    # test_gui()
+    #test_gui()
     #test_assemble_destination_path()
+    main()
