@@ -351,11 +351,13 @@ class ArchivalFile:
                     exc_info=True)
                 return ''
 
+            # add the directory matching the xx level prefix for this project number
             new_path = os.path.join(RECORDS_SERVER_LOCATION, matching_root_dirs[0])
             # list of contents of xx level directory which are not files (ie directories in xx level directory)
             xx_dir_dirs = list_of_child_dirs(new_path)
 
-            # lambda functions that check a directory name starts with either project number or prefix respectively
+            # lambda functions that check whether a directory name starts with either project number or
+            # prefix respectively.
             proj_num_in_dir_name = lambda dir_name: self.project_number == dir_name.split(" ")[0]
             prefix_in_dir_name = lambda dir_name: project_num_prefix == dir_name.split(" ")[0]
             dirs_matching_proj_num = [dir_name for dir_name in xx_dir_dirs if proj_num_in_dir_name(dir_name)]
@@ -426,7 +428,6 @@ class ArchivalFile:
                 return self.destination_path
 
             self.destination_path = new_path
-
         return self.destination_path
 
     def attribute_defaultdict(self):
@@ -455,7 +456,8 @@ class ArchivalFile:
         destination_path_list = ArchiverHelpers.split_path(self.destination_path)
         destination_dir_path = os.path.join(*destination_path_list[:-1])
 
-        os.makedirs(destination_dir_path)
+        if not os.path.exists(destination_dir_path):
+            os.makedirs(destination_dir_path)
         self.datetime_archived = datetime.now()
         return shutil.move(self.current_path, self.destination_path)
 
@@ -661,8 +663,8 @@ def test_assemble_destination_path():
     print(desired_destination)
     new_filename = "2744.G19.Notice of Completion"
 
-    location = os.path.join(os.getcwd(), "file_to_archive")
-    file = ArchivalFile(current_location_path=location, project=project, new_filename=new_filename,
+    location = os.path.join(os.getcwd(), "files_to_archive")
+    file = ArchivalFile(current_location_path= location, project=project, new_filename=new_filename,
                         destination_dir=desired_destination)
 
     dest_path = file.assemble_destination_path()
