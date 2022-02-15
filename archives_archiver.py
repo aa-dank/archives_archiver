@@ -322,7 +322,7 @@ class ArchivalFile:
                             new_path = os.path.join(new_path, large_template_destination)
                         else:
                             new_path = os.path.join(new_path, project_num_dirs[0])
-                            new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir= new_path,
+                            return path_from_project_num_dir_to_destination(path_to_project_num_dir= new_path,
                                                                                 large_template_destination= large_template_destination,
                                                                                 destination_filename= destination_filename)
 
@@ -410,19 +410,19 @@ class ArchivalFile:
 
                 if len(dirs_matching_proj_num) == 0:
                     new_path = os.path.join(new_path, self.project_number)
-                    new_path = path_from_project_num_dir_to_destination(new_path,
+                    return path_from_project_num_dir_to_destination(new_path,
                                                                         self.nested_large_template_destination_dir(),
                                                                         self.get_destination_filename())
                 if len(dirs_matching_proj_num) == 1:
                     new_path = os.path.join(new_path, dirs_matching_proj_num[0])
-                    new_path = path_from_project_num_dir_to_destination(new_path,
+                    return path_from_project_num_dir_to_destination(new_path,
                                                                         self.nested_large_template_destination_dir(),
                                                                         self.get_destination_filename())
 
             # if we do find a dir that corresponds with the project number...
             if len(dirs_matching_proj_num) == 1:
                 new_path = os.path.join(new_path, dirs_matching_proj_num[0])
-                new_path = path_from_project_num_dir_to_destination(new_path,
+                return path_from_project_num_dir_to_destination(new_path,
                                                                     self.nested_large_template_destination_dir(),
                                                                     self.get_destination_filename())
 
