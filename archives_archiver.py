@@ -192,6 +192,9 @@ class ArchivalFile:
         :param destination_dir: chosen directory from the directory templates
         """
         self.current_path = current_path
+        self.size = None
+        if self.current_path:
+            self.size = str(os.path.getsize(current_path))
         self.project_number = project
         self.destination_dir = destination_dir
         self.new_filename = new_filename
@@ -440,10 +443,16 @@ class ArchivalFile:
         return self.destination_path
 
     def attribute_defaultdict(self):
-        dict = {"time_archived": self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S"),
-                "project_number": self.project_number,
+        date_stamp = self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S")
+        if (self.destination_path or self.current_path) and not self.size:
+            if not self.destination_path:
+                self.size = str(os.path.getsize(self.current_path))
+            else:
+                self.size = str(os.path.getsize(self.destination_path))
+
+        dict = {"time_archived": date_stamp, "project_number": self.project_number,
                 "destination_path": self.destination_path, "destination_directory": self.destination_dir,
-                "notes": self.notes}
+                "file_size": self.size, "notes": self.notes}
         return defaultdict(None, dict)
 
     def archive(self, destination=None):
