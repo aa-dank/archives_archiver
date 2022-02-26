@@ -1,6 +1,8 @@
 import os
 import logging
 import shutil
+import time
+import random
 import pandas as pd
 import PySimpleGUI as sg
 
@@ -128,19 +130,17 @@ class GuiHandler:
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
         listbox_height = 18
 
-        destination_gui_layout = [[sg.Text(f"Choose a location for:")],
-                                  [sg.Text(f"{current_filename}", font='bold', justification='center')],
-                                  [sg.Text("Default Project:"), sg.Text(default_project_num)],
-                                  [sg.Text("Project Number (Leave Blank to use Default.):"),
-                                   sg.Input(key="New Project Number")],
-                                  [sg.Text("Destination filename"),
-                                   sg.Input(key="Filename")]
-                                  [sg.Text("Choose Directory to for file:"),
-                                   sg.Listbox(values=dir_choices, key="Directory Choice",
-                                              size=(listbox_width, listbox_height))],
-                                  [sg.Text(
-                                      "Alternatively, Enter the full path to directory where the file has been \ archived:")],
-                                  [sg.Input(key="Manual Path")], [sg.Text("Notes: ")], [sg.Input(key="Notes")]]
+        destination_gui_layout = [
+            [sg.Text(f"Choose a location for:")],
+            [sg.Text(f"{current_filename}", font='bold', justification='center')],
+            [sg.Text("Default Project:"), sg.Text(default_project_num)],
+            [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
+            [sg.Text("Destination filename"), sg.Input(key="Filename")],
+            [sg.Text("Choose Directory to for file:"), sg.Listbox(values=dir_choices, key="Directory Choice",
+                                                                  size=(listbox_width, listbox_height))],
+            [sg.Text( "Alternatively, Enter the full path to directory where the file has been archived:")],
+            [sg.Input(key="Manual Path")], [sg.Text("Notes: ")], [sg.Input(key="Notes")]
+        ]
 
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
@@ -485,10 +485,55 @@ class Researcher:
 
     def __init__(self, research_cache_filepath):
         self.research_cache_filepath = research_cache_filepath
-        pass
+        self.xx_dirs_to_ignore = ["01XX JOCs", "00xx  Consulting Agreements", "10xx   Regulatory Requirements",
+                                  "110xx  Infrastructure Planning Documents and Studies",
+                                  "111xx  Area Planning Documents and Studies",
+                                  "112xx  Proposed Structure Planning Documents and Studies",
+                                  "113xx  Environmental Planning Documents and Studies",
+                                  "114xx  Long Range Development Planning (LRDP) Documents and Studies",
+                                  "115xx  Student Issues Planning & Studies",
+                                  "116xx  Economic Planning Documents and Studies",
+                                  "117xx  Handicap ADA Planning Documents and Studies",
+                                  "130xx  Campus Reference Materials", "140xx  Storm Water Management"]
 
-    def similar_filename_paths(self):
-        pass
+    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 40, max_paths = 4):
+        start_time = time.time()
+        current_time = start_time
+        similarly_named_files = []
+
+        # tests directory to see if it should be consideredwhen searching for similar files.
+        is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower.split(" ")[0]) and (
+            not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
+                dir_name not in self.xx_dirs_to_ignore)
+
+
+        # While this search has not taken up the allocated time or found sufficient number of similar files...
+        while (current_time - start_time) < duration and len(similarly_named_files) < max_paths:
+            xx_level_dirs = [d for d in os.listdir(RECORDS_SERVER_LOCATION) if is_xx_dir_to_search(d)]
+            random_index = random.randint(0, len(xx_level_dirs) - 1)
+            # Path of random xx level directory where we will initialize a search.
+            random_search_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
+            self.xx_dirs_to_ignore.append(xx_level_dirs[random_index])
+            for root, dirs, files in os.walk(random_search_start):
+                found_similar_file = False
+                for some_file in files:
+                    ratio = fuzz.token_set_ratio(original_filename, some_file)
+
+                    #if the fuzzy filename comparison calculates a similarity above our threshhold...
+                    if ratio > similarity_threshold:
+                        #append this searched directory so that we won't ressearch this directory
+                        similarly_named_files.append(os.path.join(root, some_file))
+                        found_similar_file =True
+                        break
+
+                if found_similar_file:
+                    break
+
+            current_time = time.time()
+
+        return similarly_named_files
+
+
 
     def destination_examples(self):
         def randomized_destination_examples_from_cache():
