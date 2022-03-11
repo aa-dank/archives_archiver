@@ -325,7 +325,7 @@ class ArchivalFile:
                         else:
                             new_path = os.path.join(new_path, project_num_dirs[0])
                             return path_from_project_num_dir_to_destination(path_to_project_num_dir=new_path,
-                                                                            large_template_destination=large_template_destination,
+                                                                            large_template_destination= large_template_destination,
                                                                             destination_filename=destination_filename)
 
             # if the destination_dir doesn't have a project template dir parent...
@@ -358,10 +358,8 @@ class ArchivalFile:
 
             # if we have more than one matching root dir we throw an error
             if len(matching_root_dirs) != 1:
-                logging.exception(
-                    f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for project number {self.project_number}",
-                    exc_info=True)
-                return ''
+                raise Exception(
+                    f"{len(matching_root_dirs)} matching directories in {RECORDS_SERVER_LOCATION} for project number {self.project_number}")
 
             # add the directory matching the xx level prefix for this project number
             new_path = os.path.join(RECORDS_SERVER_LOCATION, matching_root_dirs[0])
@@ -376,19 +374,15 @@ class ArchivalFile:
 
             # if more than one directory starts with the same project number...
             if len(dirs_matching_proj_num) > 1:
-                logging.exception(
-                    f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.",
-                    exc_info=True)
-                return ''
+                raise Exception(
+                    f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.")
 
             # if no directories match the project number...
             if len(dirs_matching_proj_num) == 0:
                 dirs_matching_prefix = [dir_name for dir_name in xx_dir_dirs if prefix_in_dir_name(dir_name)]
                 if len(dirs_matching_prefix) > 1:
-                    logging.exception(
-                        f"{len(dirs_matching_prefix)} matching directories in {new_path} for prefix for project number {self.project_number}; expected 0 or 1.",
-                        exc_info=True)
-                    return ''
+                    raise Exception(
+                        f"{len(dirs_matching_prefix)} matching directories in {new_path} for prefix for project number {self.project_number}; expected 0 or 1.")
 
                 # if there is now project number or prefix directory at the 'xx' level, it will need to be made
                 if len(dirs_matching_prefix) == 0:
@@ -666,12 +660,22 @@ class Archivist:
         This also will exit the program if the user selects the 'exit' button in the gui.
         :return: bool value of whether to move the file_to_archive to the destination
         """
-        file_destination = self.file_to_archive.assemble_destination_path()
-        confirmation_gui_layout = self.gui.confirmation_layout(destination_path=file_destination)
-        confirmation_gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
-        if confirmation_gui_results["Button Event"].lower() == "exit":
-            self.exit_app()
-        return confirmation_gui_results["Button Event"].lower() == "ok"
+
+        try:
+            file_destination = self.file_to_archive.assemble_destination_path()
+        except Exception as error:
+            except_layout = self.gui.error_message_layout(error_message= str(error))
+            gui_results = self.gui.make_window(window_name= "Invalid Destination Choices", window_layout= except_layout)
+            if gui_results["Button Event"].lower() == "exit":
+                self.exit_app()
+            return False
+
+        else:
+            confirmation_gui_layout = self.gui.confirmation_layout(destination_path=file_destination)
+            gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
+            if gui_results["Button Event"].lower() == "exit":
+                self.exit_app()
+        return gui_results["Button Event"].lower() == "ok"
 
     def archive_file(self):
         self.file_to_archive.archive()
@@ -714,6 +718,8 @@ def main():
         if not ppdo_archivist.file_to_archive.project_number:
             ppdo_archivist.display_error("No project number selected.")
             continue
+
+
 
         destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
         if destination_confirmed:
