@@ -490,16 +490,28 @@ class Researcher:
                                   "117xx  Handicap ADA Planning Documents and Studies",
                                   "130xx  Campus Reference Materials", "140xx  Storm Water Management"]
 
-    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 40, max_paths = 4):
+    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 72, max_paths = 4):
+        """
+
+        :param original_filename: (not the path)
+        :param duration: length of time in seconds that this search algorithm can run
+        :param similarity_threshold: how similar a filename needs to be to be included as similar
+        :param max_paths: maximum number of filepaths that will be returned
+        :return:
+        """
+
+        #TODO: could be made better by removing common, unhelpful tokens from original_filename
+        #TODO: copuld be made better by removing very short (or comparably short) filenames from being compared to original_filename
+
+        #start search timer
         start_time = time.time()
         current_time = start_time
         similarly_named_files = []
 
         # tests directory to see if it should be consideredwhen searching for similar files.
-        is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower.split(" ")[0]) and (
+        is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower().split(" ")[0]) and (
             not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
                 dir_name not in self.xx_dirs_to_ignore)
-
 
         # While this search has not taken up the allocated time or found sufficient number of similar files...
         while (current_time - start_time) < duration and len(similarly_named_files) < max_paths:
@@ -516,15 +528,14 @@ class Researcher:
                     #if the fuzzy filename comparison calculates a similarity above our threshhold...
                     if ratio > similarity_threshold:
                         #append this searched directory so that we won't ressearch this directory
-                        similarly_named_files.append(os.path.join(root, some_file))
+                        similar_file_filepath = os.path.join(root, some_file)
+                        similarly_named_files.append({"filepath": similar_file_filepath, "ratio": ratio})
                         found_similar_file =True
                         break
 
                 if found_similar_file:
                     break
-
             current_time = time.time()
-
         return similarly_named_files
 
 
@@ -564,7 +575,7 @@ class Archivist:
     def display_error(self, error_message) -> bool:
         """
 
-        :param error_message:
+        :param error_message: string message to display
         :return: bool whether user hit 'ok' button or not
         """
         error_layout = self.gui.error_message_layout(error_message=error_message)
@@ -752,8 +763,16 @@ def test_assemble_destination_path():
     dest_path = file.assemble_destination_path()
     print(dest_path)
 
+def test_researcher():
+    og_filename = "File 1811 Building Inspection Cards 8-1-13 thru 8-9-13.pdf"
+    cache_path = os.path.join(os.getcwd(), "test_cache.json")
+    searcher = Researcher(research_cache_filepath=cache_path)
+    similar_filenames = searcher.similar_filename_paths(original_filename=og_filename,duration=55)
+    [print(x["filepath"]) for x in similar_filenames]
+
 
 if __name__ == "__main__":
     # test_gui()
     # test_assemble_destination_path()
-    main()
+    test_researcher()
+    #main()
