@@ -209,6 +209,20 @@ class ArchivalFile:
         :return:
         """
 
+        def file_code_from_destination_dir(destination_dir):
+            """
+
+            :param destination_dir: full destination directory name
+            :return: string filing code
+            """
+            file_code = ''
+            dir_name_index = 0
+            while destination_dir[dir_name_index] != '-':
+                file_code += destination_dir[dir_name_index]
+                dir_name_index += 1
+            return file_code.strip().upper()
+
+
         current_filename = ArchiverHelpers.split_path(self.current_path)[-1]
         dest_filename = current_filename
         if self.new_filename:
@@ -220,7 +234,8 @@ class ArchivalFile:
         #if the destination filename didn't include the file extwension add it to the filename component list
         if not split_dest_components[-1] == extension:
             split_dest_components.append(extension)
-        prefix_list = [self.project_number, self.destination_dir[:2].upper()]
+
+        prefix_list = [self.project_number, file_code_from_destination_dir(self.destination_dir)]
         split_dest_components = prefix_list + split_dest_components
         destination_filename = ".".join(split_dest_components)
         return destination_filename
@@ -774,5 +789,5 @@ def test_researcher():
 if __name__ == "__main__":
     # test_gui()
     # test_assemble_destination_path()
-    test_researcher()
-    #main()
+    #test_researcher()
+    main()
