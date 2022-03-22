@@ -727,6 +727,41 @@ class Archivist:
         exit()
 
 
+class Tester:
+
+    @staticmethod
+    def test_gui():
+        window_test = GuiHandler()
+        # welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
+        dest_layout = window_test.destination_choice_layout(dir_choices=DIRECTORY_CHOICES, default_project_num="3238",
+                                                            file_exists_to_archive=True)
+        dest_results = window_test.make_window("Choose a file destination.", dest_layout)
+        fail_reason = "Could not find necessary sub-directories to reconcile desired destination path."
+        window_test.make_window("Could not archive file in desired destination.",
+                                window_layout=window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
+
+    @staticmethod
+    def test_assemble_destination_path():
+        project = '2700'
+        desired_destination = DIRECTORY_CHOICES[8]
+        print(desired_destination)
+        new_filename = "2744.G19.Notice of Completion"
+
+        location = os.path.join(os.getcwd(), "files_to_archive")
+        file = ArchivalFile(current_location_path=location, project=project, new_filename=new_filename,
+                            destination_dir=desired_destination)
+
+        dest_path = file.assemble_destination_path()
+        print(dest_path)
+
+    @staticmethod
+    def test_researcher():
+        og_filename = "File 1811 Building Inspection Cards 8-1-13 thru 8-9-13.pdf"
+        cache_path = os.path.join(os.getcwd(), "test_cache.json")
+        searcher = Researcher(research_cache_filepath=cache_path)
+        similar_filenames = searcher.similar_filename_paths(original_filename=og_filename, duration=55)
+        [print(x["filepath"]) for x in similar_filenames]
+
 def main():
     csv_filename = "archived_files_archive.csv"
     csv_filepath = os.path.join(os.getcwd(), csv_filename)
@@ -745,6 +780,9 @@ def main():
             ppdo_archivist.display_error("No project number selected.")
             continue
 
+        if not ppdo_archivist.file_to_archive.destination_dir:
+            ppdo_archivist.display_error("No destination directory was selected.")
+            continue
 
 
         destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
@@ -754,40 +792,9 @@ def main():
         print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
-def test_gui():
-    window_test = GuiHandler()
-    # welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
-    dest_layout = window_test.destination_choice_layout(dir_choices=DIRECTORY_CHOICES, default_project_num="3238",
-                                                        file_exists_to_archive=True)
-    dest_results = window_test.make_window("Choose a file destination.", dest_layout)
-    fail_reason = "Could not find necessary sub-directories to reconcile desired destination path."
-    window_test.make_window("Could not archive file in desired destination.",
-                            window_layout=window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
-
-
-def test_assemble_destination_path():
-    project = '2700'
-    desired_destination = DIRECTORY_CHOICES[8]
-    print(desired_destination)
-    new_filename = "2744.G19.Notice of Completion"
-
-    location = os.path.join(os.getcwd(), "files_to_archive")
-    file = ArchivalFile(current_location_path=location, project=project, new_filename=new_filename,
-                        destination_dir=desired_destination)
-
-    dest_path = file.assemble_destination_path()
-    print(dest_path)
-
-def test_researcher():
-    og_filename = "File 1811 Building Inspection Cards 8-1-13 thru 8-9-13.pdf"
-    cache_path = os.path.join(os.getcwd(), "test_cache.json")
-    searcher = Researcher(research_cache_filepath=cache_path)
-    similar_filenames = searcher.similar_filename_paths(original_filename=og_filename,duration=55)
-    [print(x["filepath"]) for x in similar_filenames]
-
 
 if __name__ == "__main__":
-    # test_gui()
-    # test_assemble_destination_path()
-    #test_researcher()
+    # Tester.test_gui()
+    # Tester.test_assemble_destination_path()
+    # Tester.test_researcher()
     main()
