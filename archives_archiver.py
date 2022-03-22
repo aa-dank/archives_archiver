@@ -47,8 +47,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G1.2 - Executive Architect to.from', 'G1.3 - Users.Building Committee.Campus to.from',
                      'G1.4 - PPC and PP. Certified Payroll', 'G1.5 - Geotechnical Engineer to.from',
                      'G1.6 - Testing and Inspection to Laboratory to.from', 'G1.7 - General Counsel to.from',
-                     'G1.7A - General Counsel Confidential', 'G1.8 - Other',
-                     'G10 - Testing and Inspection Reports.Other',
+                     'G1.8 - Other', 'G10 - Testing and Inspection Reports.Other',
                      'G11 - Proposal Request. Bulletins. Contractors Response',
                      'G11.1 - Proposal Request 1 with back up', 'G11.2 - Proposal Request 2',
                      'G11.3 - Proposal Request 3', 'G12 - Request for Information RFI',
@@ -151,7 +150,7 @@ class GuiHandler:
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
             [sg.Text("Choose Directory to for file:"), sg.Listbox(values=dir_choices, key="Directory Choice",
                                                                   size=(listbox_width, listbox_height))],
-            [sg.Text( "Alternatively, Enter the full path to directory where the file has been archived:")],
+            [sg.Text("Alternatively, Enter the full path to directory where the file has been archived:")],
             [sg.Input(key="Manual Path")], [sg.Text("Notes: ")], [sg.Input(key="Notes")]
         ]
 
@@ -229,7 +228,7 @@ class ArchivalFile:
         extension = current_filename.split(".")[-1]
         split_dest_components = dest_filename.split(".")
 
-        #if the destination filename didn't include the file extwension add it to the filename component list
+        # if the destination filename didn't include the file extwension add it to the filename component list
         if not split_dest_components[-1] == extension:
             split_dest_components.append(extension)
 
@@ -248,7 +247,6 @@ class ArchivalFile:
 
         nested_dirs = self.destination_dir
         if nested_dirs[1].isdigit():
-
             # a directory from DIRECTORY_CHOICES is parent directory if it shares same first char and doesn't have a
             # digit in second char position
             is_parent_dir = lambda child_dir, dir: dir[0] == child_dir[0] and not dir[1].isdigit()
@@ -338,7 +336,7 @@ class ArchivalFile:
                         else:
                             new_path = os.path.join(new_path, project_num_dirs[0])
                             return path_from_project_num_dir_to_destination(path_to_project_num_dir=new_path,
-                                                                            large_template_destination= large_template_destination,
+                                                                            large_template_destination=large_template_destination,
                                                                             destination_filename=destination_filename)
 
             # if the destination_dir_name doesn't have a project template dir parent...
@@ -358,7 +356,6 @@ class ArchivalFile:
                                                                         destination_filename=destination_filename)
 
             return os.path.join(new_path, destination_filename)
-
 
         ############### Start of assemble_destination_path() #################
         if not self.destination_path:
@@ -408,7 +405,7 @@ class ArchivalFile:
 
                 if len(dirs_matching_prefix) == 1:
                     # if a dir exists that does begin with the prefix, we'll add it to our path and look again for
-                    # directories that begin with the project number #TODO ..and prefix?
+                    # directories that begin with the project number #TODO ..and prefix again too?
 
                     new_path = os.path.join(new_path, dirs_matching_prefix[0])
                     prefix_dir_dirs = list_of_child_dirs(new_path)
@@ -490,8 +487,7 @@ class ArchivalFile:
 
 class Researcher:
 
-    def __init__(self, research_cache_filepath):
-        self.research_cache_filepath = research_cache_filepath
+    def __init__(self):
         self.xx_dirs_to_ignore = ["01XX JOCs", "00xx  Consulting Agreements", "10xx   Regulatory Requirements",
                                   "110xx  Infrastructure Planning Documents and Studies",
                                   "111xx  Area Planning Documents and Studies",
@@ -503,7 +499,7 @@ class Researcher:
                                   "117xx  Handicap ADA Planning Documents and Studies",
                                   "130xx  Campus Reference Materials", "140xx  Storm Water Management"]
 
-    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 72, max_paths = 10):
+    def similar_filename_paths(self, original_filename, duration=10, similarity_threshold=72, max_paths=10):
         """
 
         :param original_filename: (not the path)
@@ -513,10 +509,10 @@ class Researcher:
         :return:
         """
 
-        #TODO: could be made better by removing common, unhelpful tokens from original_filename
-        #TODO: copuld be made better by removing very short (or comparably short) filenames from being compared to original_filename
+        # TODO: could be made better by removing common, unhelpful tokens from original_filename
+        # TODO: copuld be made better by removing very short (or comparably short) filenames from being compared to original_filename
 
-        #start search timer
+        # start search timer
         start_time = time.time()
         current_time = start_time
         similarly_named_files = []
@@ -525,26 +521,34 @@ class Researcher:
         # tests directory to see if it should be considered when searching for similar files.
         is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower().split(" ")[0]) and (
             not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
-                dir_name not in dirs_to_ignore)
+                                                       dir_name not in dirs_to_ignore)
 
         # While this search has not taken up the allocated time or found sufficient number of similar files...
         while (current_time - start_time) < duration and len(similarly_named_files) < max_paths:
             xx_level_dirs = [d for d in os.listdir(RECORDS_SERVER_LOCATION) if is_xx_dir_to_search(d)]
             random_index = random.randint(0, len(xx_level_dirs) - 1)
             # Path of random xx level directory where we will initialize a search.
-            random_search_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
+            random_xx_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
             dirs_to_ignore.append(xx_level_dirs[random_index])
+
+            # choose another directory at random from which to begin search
+            number_dirs = [dir for dir in os.listdir(random_xx_start) if
+                           os.path.isdir(os.path.join(random_xx_start, dir))]
+            random_index2 = random.randint(0, len(number_dirs) - 1)
+            random_search_start = os.path.join(random_xx_start, number_dirs[random_index2])
+
+            #  Iterate through directory structure from the random starting dir...
             for root, dirs, files in os.walk(random_search_start):
                 found_similar_file = False
                 for some_file in files:
                     ratio = fuzz.token_set_ratio(original_filename, some_file)
 
-                    #if the fuzzy filename comparison calculates a similarity above our threshhold...
+                    # if the fuzzy filename comparison calculates a similarity above our threshhold...
                     if ratio > similarity_threshold:
-                        #append this searched directory so that we won't research this directory
+                        # append this searched directory so that we won't research this directory
                         similar_file_filepath = os.path.join(root, some_file)
                         similarly_named_files.append({"filepath": similar_file_filepath, "ratio": ratio})
-                        found_similar_file =True
+                        found_similar_file = True
                         break
 
                 if found_similar_file:
@@ -553,19 +557,20 @@ class Researcher:
         return similarly_named_files
 
 
+    def randomized_destination_examples(self, dest_dir, num_of_examples=4,
+                                        duration=7, files_in_example=3):
+        """
+        Starting at a random location in the directories within the xx level directories, search for examples of the
+        same destination directory with at least a sufficient number of files in it to be used as examples --
+        demonstrating the types of files that would be found in a given destination directory
+        :param dest_dir: str name of the destination directory
+        :param num_of_examples: int number of destination directory paths to be returned
+        :param duration: int alotted number of seconds for this function to search for
+        :param files_in_example: int minimum number of files to be in a directory for it to be considered as an example
+        :return: list of path strings.
+        """
 
-    def destination_examples(self, destination_dir, duration=7, max_examples= 6):
-        #TODO: if randomized_destination_examples_from_search() is not fast enough, we'll combine a cache with that function to make it quicker within this function
-
-        def randomized_destination_examples_from_cache():
-
-            pass
-        pass
-
-    def randomized_destination_examples_from_search(self, dest_dir, num_of_examples= 4,
-                                                    duration= 7, files_in_example = 3):
-
-        def is_good_dir_example(chosen_destination_dir, dir_example_path, desired_files_num= files_in_example):
+        def is_good_dir_example(chosen_destination_dir, dir_example_path, desired_files_num=files_in_example):
             """
             Sub-routine for deciding if a given directory represents a good example of the chosen directory type.
             for the purposes of this application, a good directory example starts with the same filing code
@@ -575,20 +580,20 @@ class Researcher:
             :param desired_files_num:
             :return:
             """
-            #a directory name probably starts with a filing code (eg C1.2, F10, H) if it starts with a letter and when
+            # a directory name probably starts with a filing code (eg C1.2, F10, H) if it starts with a letter and when
             # split by spaces, the second element is a dash #TODO may need improving
-            probably_has_filing_code = lambda dir: (len(dir.split(" ")) > 2) and (dir[0].isalpha()) and\
+            probably_has_filing_code = lambda dir: (len(dir.split(" ")) > 2) and (dir[0].isalpha()) and \
                                                    (dir.split(" ")[1] == "-")
             example_dir_name = ArchiverHelpers.split_path(dir_example_path)[-1]
             if not probably_has_filing_code(example_dir_name):
                 return False
 
-            #if the directory doesn't share a filing code with chosen destination dir, it is not a good example
+            # if the directory doesn't share a filing code with chosen destination dir, it is not a good example
             example_file_code = ArchiverHelpers.file_code_from_destination_dir(example_dir_name)
             if not ArchiverHelpers.file_code_from_destination_dir(chosen_destination_dir) == example_file_code:
                 return False
 
-            #if the example directory doesn't have enough files in it, it is a bad example
+            # if the example directory doesn't have enough files in it, it is a bad example
             files_in_example = [file for file in os.listdir(dir_example_path) if
                                 os.path.isfile(os.path.join(dir_example_path, file))]
             if not len(files_in_example) >= desired_files_num:
@@ -596,34 +601,57 @@ class Researcher:
 
             return True
 
-
-
         start_time = time.time()
         current_time = start_time
         example_dir_paths = []
         dirs_to_ignore = self.xx_dirs_to_ignore.copy()
 
-
-        # tests directory to see if it should be considered when searching for similar files.
+        # function to test directory to see if it should be considered when searching for good destination examples.
         is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower().split(" ")[0]) and (
             not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
                                                        dir_name not in dirs_to_ignore)
 
+        #  While the duration allotted for this function has not been used and we haven't found enough good destination
+        #  examples, choose random xx level directory and a subsequent random project number directory to search for
+        #  another example of the destination directory.
         while (current_time - start_time) < duration and len(example_dir_paths) < num_of_examples:
             xx_level_dirs = [d for d in os.listdir(RECORDS_SERVER_LOCATION) if is_xx_dir_to_search(d)]
             random_index = random.randint(0, len(xx_level_dirs) - 1)
 
             # Path of random xx level directory where we will initialize a search.
-            random_search_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
+            random_xx_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
             dirs_to_ignore.append(xx_level_dirs[random_index])
 
+            #choose another directory at random from which to begin search
+            number_dirs = [dir for dir in os.listdir(random_xx_start) if
+                           os.path.isdir(os.path.join(random_xx_start, dir))]
+            random_index2 = random.randint(0, len(number_dirs) - 1)
+            random_search_start = os.path.join(random_xx_start, number_dirs[random_index2])
 
             for root, dirs, files in os.walk(random_search_start):
                 good_dir_example = False
+                if not is_good_dir_example(chosen_destination_dir=dest_dir, dir_example_path=root):
+                    current_time = time.time()
+                    if (current_time - start_time) > duration:
+                        break
 
+                    continue
 
-                pass
+                #add good example path to example path list
+                example_dir_paths.append(root)
+                current_time = time.time()
+                break
 
+        return example_dir_paths
+
+    def destination_examples(self, destination_dir, duration=7, max_examples=6):
+        # TODO: if randomized_destination_examples() is not fast enough, we'll combine a cache with that function to make it quicker within this function
+
+        def randomized_destination_examples_from_cache():
+            pass
+
+        def randomized_destination_examples_from_search():
+            pass
         pass
 
 
@@ -752,8 +780,8 @@ class Archivist:
         try:
             file_destination = self.file_to_archive.assemble_destination_path()
         except Exception as error:
-            except_layout = self.gui.error_message_layout(error_message= str(error))
-            gui_results = self.gui.make_window(window_name= "Invalid Destination Choices", window_layout= except_layout)
+            except_layout = self.gui.error_message_layout(error_message=str(error))
+            gui_results = self.gui.make_window(window_name="Invalid Destination Choices", window_layout=except_layout)
             if gui_results["Button Event"].lower() == "exit":
                 self.exit_app()
             return False
@@ -818,11 +846,18 @@ class Tester:
 
     @staticmethod
     def test_researcher():
-        og_filename = "File 1811 Building Inspection Cards 8-1-13 thru 8-9-13.pdf"
-        cache_path = os.path.join(os.getcwd(), "test_cache.json")
-        searcher = Researcher(research_cache_filepath=cache_path)
-        similar_filenames = searcher.similar_filename_paths(original_filename=og_filename, duration=55)
+        print("Similar File Examples: \n")
+        og_filename = "20.07.10 Sewer Excavated.pdf"
+        searcher = Researcher()
+        similar_filenames = searcher.similar_filename_paths(original_filename=og_filename, duration=8)
         [print(x["filepath"]) for x in similar_filenames]
+
+        print("\n \n")
+        print("Destination Examples: \n")
+        dir_choice = "C1 - Executive Architect"
+        directory_examples = searcher.randomized_destination_examples(dest_dir= dir_choice, duration= 18)
+        [print(example) for example in directory_examples]
+
 
 def main():
     csv_filename = "archived_files_archive.csv"
@@ -842,10 +877,10 @@ def main():
             ppdo_archivist.display_error("No project number selected.")
             continue
 
+        #if no destination directory was chosen display error message
         if not ppdo_archivist.file_to_archive.destination_dir:
             ppdo_archivist.display_error("No destination directory was selected.")
             continue
-
 
         destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
         if destination_confirmed:
@@ -854,9 +889,8 @@ def main():
         print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
-
 if __name__ == "__main__":
     # Tester.test_gui()
     # Tester.test_assemble_destination_path()
-    # Tester.test_researcher()
-    main()
+    Tester.test_researcher()
+    # main()
