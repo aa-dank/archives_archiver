@@ -23,28 +23,27 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      "B1 - CPS and Chancellor's Approvals", 'B100 - Other', 'B11 - LEED',
                      'B12 - Outside Regulatory Agencies', 'B13 - Coastal Commission',
                      'B2 - Office of the President UC Regents', 'B3 - State Public Works Board',
-                     'B4 - Department of Finance', 'B5 - Legislavtive Submittals', 'B6 - State Fire Marshal',
+                     'B4 - Department of Finance', 'B5 - Legislative Submittals', 'B6 - State Fire Marshal',
                      'B7 - Office of State Architect  (DSA)', 'B8 -  General Counsel',
                      'B8.1 - General Counsel - Confidential', 'C1 - Executive Architect', 'C1.1 - Selection',
                      'C1.2 - Correspondence', 'C1.3 - Agreement', 'C2 - Other Consultants', 'C2.1 - Selection',
-                     'C2.2 - Correspondence', 'C2.3 - Agreement', 'D1 - Environmental Correspondence',
+                     'C2.2 - Correspondence', 'C2.3 - Agreement', 'D1 - Environmental Correspondences',
                      'D2 - EIC Forms', 'D3 - CEQA Documentation', 'D4 - Mitigation Monitoring Program', 'E1 - DPP',
                      'E2 - PPG', 'E3 - Budget Cost Estimates', 'E4 - Planning Schedules',
-                     'E5 - Program and Design Correspondence', 'E5.1 - Executive Architect to.from',
-                     'E5.2 - Special Consultants', 'E5.3 - Users. Building Committee. Campus to.from',
+                     'E5 - Program and Design Correspondences', 'E5.1 - Executive Architect Correspondences',
+                     'E5.2 - Special Consultants', 'E5.3 - Users. Building Committee. Campus Correspondences',
                      'E5.4 - PPC and PP', 'E5.5 - Office of the President to.from', 'E5.6 - Building Committee to.from',
                      'E5.7 - Other', 'E5.8 - Office of General Counsel', 'E6 - Reports (soils, structural, calcs)',
                      'E7 - Value Engineering', 'E7.1 - Value Engineering Correspondence',
                      'E7.2 - VE Workshop Minutes, Summaries, Final Reports', 'E8 - Program and Design Meeting Minutes',
-                     'F1 - Bid and Contract Award Correspondence', 'F1.1 - Executive Architect to.from',
-                     'F1.2 - Special Consultatns to.from', 'F1.4 - PPC and PP',
-                     'F1.5 - Office of the President to.from', 'F1.6 - General Cousel to.from',
-                     'F1.6A - Gerneal Counsel Confidential', 'F1.7 - Pre-Qualification', 'F1.8 - Other',
-                     'F10 - Escrow Agreement', 'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews',
-                     'F2.2 - In-house. PP reviews', 'F2.3 - Independent Cost Review',
-                     'F2.4 - Independent Seismic Review', 'F2.5 - Other', 'F5 - Drawings and Spec',
-                     'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract', 'F9 - Builders Risk Insurance',
-                     'G1 - Construction Correspondence', 'G1.1 - Contractor to.from',
+                     'F1 - Bid and Contract Award Correspondence', 'F1.1 - Executive Architect Correspondences',
+                     'F1.2 - Special Consultants Correspondences', 'F1.4 - PPC and PP',
+                     'F1.5 - Office of the President to.from', 'F1.6 - General Counsel Correspondences',
+                     'F1.7 - Pre-Qualification', 'F1.8 - Other', 'F10 - Escrow Agreement',
+                     'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
+                     'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
+                     'F5 - Drawings and Spec', 'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract',
+                     'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence', 'G1.1 - Contractor to.from',
                      'G1.2 - Executive Architect to.from', 'G1.3 - Users.Building Committee.Campus to.from',
                      'G1.4 - PPC and PP. Certified Payroll', 'G1.5 - Geotechnical Engineer to.from',
                      'G1.6 - Testing and Inspection to Laboratory to.from', 'G1.7 - General Counsel to.from',
@@ -56,7 +55,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G13 - Letter of Instruction LOI', 'G14 - User Request Change in Scope', 'G15 - Change Order',
                      'G15.1 - Change Order 1 with back up', 'G15.2 - Change Order 2', 'G15.3 - Change Order 3',
                      'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist', 'G19 - NOC',
-                     'G2 - Certificate of Payment', 'G20 - Warrranty Deficiency', 'G21 - Construction Photos',
+                     'G2 - Certificate of Payment', 'G20 - Warranty Deficiency', 'G21 - Construction Photos',
                      'G22 - Claims. Public Records Act', 'G22.1 - Claims Confidential', 'G23 - Commissioning',
                      'G24 - Building Permits', "G3 - Contractor's Schedule and Updates", 'G4 - Progress Meeting Notes',
                      'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits', 'G6 - UCSC Memoranda',
@@ -97,6 +96,20 @@ class ArchiverHelpers:
         if len(project_no) <= 4:
             prefix = project_no[:2]
         return prefix + 'xx', project_no
+
+    @staticmethod
+    def file_code_from_destination_dir(destination_dir_name):
+        """
+
+        :param destination_dir_name: full destination directory name
+        :return: string filing code
+        """
+        file_code = ''
+        dir_name_index = 0
+        while destination_dir_name[dir_name_index] != '-':
+            file_code += destination_dir_name[dir_name_index]
+            dir_name_index += 1
+        return file_code.strip().upper()
 
 
 class GuiHandler:
@@ -208,21 +221,6 @@ class ArchivalFile:
         them from current filename to desired new filename
         :return:
         """
-
-        def file_code_from_destination_dir(destination_dir):
-            """
-
-            :param destination_dir: full destination directory name
-            :return: string filing code
-            """
-            file_code = ''
-            dir_name_index = 0
-            while destination_dir[dir_name_index] != '-':
-                file_code += destination_dir[dir_name_index]
-                dir_name_index += 1
-            return file_code.strip().upper()
-
-
         current_filename = ArchiverHelpers.split_path(self.current_path)[-1]
         dest_filename = current_filename
         if self.new_filename:
@@ -235,7 +233,7 @@ class ArchivalFile:
         if not split_dest_components[-1] == extension:
             split_dest_components.append(extension)
 
-        prefix_list = [self.project_number, file_code_from_destination_dir(self.destination_dir)]
+        prefix_list = [self.project_number, ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)]
         split_dest_components = prefix_list + split_dest_components
         destination_filename = ".".join(split_dest_components)
         return destination_filename
@@ -246,7 +244,7 @@ class ArchivalFile:
 
         :return:
         """
-        # TODO handle situation when there is a destination_path but no destination_dir
+        # TODO handle situation when there is a destination_path but no destination_dir_name
 
         nested_dirs = self.destination_dir
         if nested_dirs[1].isdigit():
@@ -343,7 +341,7 @@ class ArchivalFile:
                                                                             large_template_destination= large_template_destination,
                                                                             destination_filename=destination_filename)
 
-            # if the destination_dir doesn't have a project template dir parent...
+            # if the destination_dir_name doesn't have a project template dir parent...
             else:
                 existing_destination_dirs = [dir_name for dir_name in new_path_dirs if
                                              dir_name.upper().startswith(destination_dir_prefix)]
@@ -505,7 +503,7 @@ class Researcher:
                                   "117xx  Handicap ADA Planning Documents and Studies",
                                   "130xx  Campus Reference Materials", "140xx  Storm Water Management"]
 
-    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 72, max_paths = 4):
+    def similar_filename_paths(self, original_filename, duration = 10, similarity_threshold = 72, max_paths = 10):
         """
 
         :param original_filename: (not the path)
@@ -522,11 +520,12 @@ class Researcher:
         start_time = time.time()
         current_time = start_time
         similarly_named_files = []
+        dirs_to_ignore = self.xx_dirs_to_ignore.copy()
 
-        # tests directory to see if it should be consideredwhen searching for similar files.
+        # tests directory to see if it should be considered when searching for similar files.
         is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower().split(" ")[0]) and (
             not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
-                dir_name not in self.xx_dirs_to_ignore)
+                dir_name not in dirs_to_ignore)
 
         # While this search has not taken up the allocated time or found sufficient number of similar files...
         while (current_time - start_time) < duration and len(similarly_named_files) < max_paths:
@@ -534,7 +533,7 @@ class Researcher:
             random_index = random.randint(0, len(xx_level_dirs) - 1)
             # Path of random xx level directory where we will initialize a search.
             random_search_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
-            self.xx_dirs_to_ignore.append(xx_level_dirs[random_index])
+            dirs_to_ignore.append(xx_level_dirs[random_index])
             for root, dirs, files in os.walk(random_search_start):
                 found_similar_file = False
                 for some_file in files:
@@ -542,7 +541,7 @@ class Researcher:
 
                     #if the fuzzy filename comparison calculates a similarity above our threshhold...
                     if ratio > similarity_threshold:
-                        #append this searched directory so that we won't ressearch this directory
+                        #append this searched directory so that we won't research this directory
                         similar_file_filepath = os.path.join(root, some_file)
                         similarly_named_files.append({"filepath": similar_file_filepath, "ratio": ratio})
                         found_similar_file =True
@@ -555,12 +554,75 @@ class Researcher:
 
 
 
-    def destination_examples(self):
-        def randomized_destination_examples_from_cache():
-            pass
+    def destination_examples(self, destination_dir, duration=7, max_examples= 6):
+        #TODO: if randomized_destination_examples_from_search() is not fast enough, we'll combine a cache with that function to make it quicker within this function
 
-        def randomized_destination_examples_from_search():
+        def randomized_destination_examples_from_cache():
+
             pass
+        pass
+
+    def randomized_destination_examples_from_search(self, dest_dir, num_of_examples= 4,
+                                                    duration= 7, files_in_example = 3):
+
+        def is_good_dir_example(chosen_destination_dir, dir_example_path, desired_files_num= files_in_example):
+            """
+            Sub-routine for deciding if a given directory represents a good example of the chosen directory type.
+            for the purposes of this application, a good directory example starts with the same filing code
+            (eg C1.2, F10, H) and has the desired number of files in it.
+            :param original_dir:
+            :param dir_example_path:
+            :param desired_files_num:
+            :return:
+            """
+            #a directory name probably starts with a filing code (eg C1.2, F10, H) if it starts with a letter and when
+            # split by spaces, the second element is a dash #TODO may need improving
+            probably_has_filing_code = lambda dir: (len(dir.split(" ")) > 2) and (dir[0].isalpha()) and\
+                                                   (dir.split(" ")[1] == "-")
+            example_dir_name = ArchiverHelpers.split_path(dir_example_path)[-1]
+            if not probably_has_filing_code(example_dir_name):
+                return False
+
+            #if the directory doesn't share a filing code with chosen destination dir, it is not a good example
+            example_file_code = ArchiverHelpers.file_code_from_destination_dir(example_dir_name)
+            if not ArchiverHelpers.file_code_from_destination_dir(chosen_destination_dir) == example_file_code:
+                return False
+
+            #if the example directory doesn't have enough files in it, it is a bad example
+            files_in_example = [file for file in os.listdir(dir_example_path) if
+                                os.path.isfile(os.path.join(dir_example_path, file))]
+            if not len(files_in_example) >= desired_files_num:
+                return False
+
+            return True
+
+
+
+        start_time = time.time()
+        current_time = start_time
+        example_dir_paths = []
+        dirs_to_ignore = self.xx_dirs_to_ignore.copy()
+
+
+        # tests directory to see if it should be considered when searching for similar files.
+        is_xx_dir_to_search = lambda dir_name: ('xx' in dir_name.lower().split(" ")[0]) and (
+            not os.path.isfile(os.path.join(RECORDS_SERVER_LOCATION, dir_name))) and (
+                                                       dir_name not in dirs_to_ignore)
+
+        while (current_time - start_time) < duration and len(example_dir_paths) < num_of_examples:
+            xx_level_dirs = [d for d in os.listdir(RECORDS_SERVER_LOCATION) if is_xx_dir_to_search(d)]
+            random_index = random.randint(0, len(xx_level_dirs) - 1)
+
+            # Path of random xx level directory where we will initialize a search.
+            random_search_start = os.path.join(RECORDS_SERVER_LOCATION, xx_level_dirs[random_index])
+            dirs_to_ignore.append(xx_level_dirs[random_index])
+
+
+            for root, dirs, files in os.walk(random_search_start):
+                good_dir_example = False
+
+
+                pass
 
         pass
 
