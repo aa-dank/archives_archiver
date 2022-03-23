@@ -141,10 +141,9 @@ class GuiHandler:
         # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
         listbox_height = 18
-
         destination_gui_layout = [
             [sg.Text(f"Choose a location for:")],
-            [sg.Text(f"{current_filename}", font='bold', justification='center')],
+            [sg.InputText(current_filename, use_readonly_for_disable=True, disabled=True, key='Inert Filename')],
             [sg.Text("Default Project:"), sg.Text(default_project_num)],
             [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
@@ -157,18 +156,26 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self, destination_path):
+    def confirmation_layout(self, destination_path: str, similar_files: list[str] = []):
         # TODO make this window. Should it have
         treedata = sg.TreeData()
 
         confirmation_gui_layout = [
             [sg.Text("Confirm this is correct location for this file:")],
-            [sg.Text(destination_path)],
-            [sg.Text("Similar directories:")],
+            [sg.Text(destination_path)]
+        ]
+
+        #if there is a list of similarly named files
+        if similar_files:
+            confirmation_gui_layout.append([sg.Text("Similar Filenames: ")])
+            filepaths_text = ", \n".join(similar_files)
+            confirmation_gui_layout.append([sg.Text(filepaths_text)])
+
+        confirmation_gui_layout += [
+            [sg.Text("Similar directories (Coming Soon):")],
             # [sg.Tree(data= treedata)],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("Exit")]
         ]
-
         return confirmation_gui_layout
 
     def failed_destination_layout(self, fail_reason: str, fail_path: str):
@@ -676,6 +683,7 @@ class Archivist:
         self.file_to_archive = file_to_archive
         self.email = None
         self.default_project_number = None
+        self.researcher = Researcher()
 
     def display_error(self, error_message) -> bool:
         """
@@ -770,7 +778,18 @@ class Archivist:
                                                                      self.file_to_archive.assemble_destination_filename())
         return self.file_to_archive
 
-    def confirmed_desired_file_destination(self):
+    def research_for_archival_file(self):
+        research = {"Files": [], "Destinations": []}
+        filename = self.file_to_archive.new_filename
+        if not filename:
+            filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
+        research["Files"] = self.researcher.similar_filename_paths(original_filename= filename, duration= 6, similarity_threshold= 72, max_paths= 7)
+
+        #TODO get destinations
+        return research
+
+
+    def confirm_chosen_file_destination(self):
         """
         spins up the confirmation screen gui and returns true if the desired path has been confirmed by the user.
         This also will exit the program if the user selects the 'exit' button in the gui.
@@ -787,10 +806,14 @@ class Archivist:
             return False
 
         else:
-            confirmation_gui_layout = self.gui.confirmation_layout(destination_path=file_destination)
+            research_results = self.research_for_archival_file()
+            similar_files_paths = [path['filepath'] for path in research_results["Files"]]
+            confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
+                                                                   similar_files= similar_files_paths)
             gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
             if gui_results["Button Event"].lower() == "exit":
                 self.exit_app()
+
         return gui_results["Button Event"].lower() == "ok"
 
     def archive_file(self):
@@ -882,7 +905,7 @@ def main():
             ppdo_archivist.display_error("No destination directory was selected.")
             continue
 
-        destination_confirmed = ppdo_archivist.confirmed_desired_file_destination()
+        destination_confirmed = ppdo_archivist.confirm_chosen_file_destination()
         if destination_confirmed:
             ppdo_archivist.archive_file()
             ppdo_archivist.add_archived_file_to_csv(csv_filepath)
@@ -892,5 +915,5 @@ def main():
 if __name__ == "__main__":
     # Tester.test_gui()
     # Tester.test_assemble_destination_path()
-    Tester.test_researcher()
-    # main()
+    # Tester.test_researcher()
+    main()
