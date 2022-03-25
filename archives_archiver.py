@@ -1,6 +1,8 @@
 import os
 import logging
+import subprocess
 import shutil
+import sys
 import time
 import random
 import pandas as pd
@@ -109,6 +111,28 @@ class ArchiverHelpers:
             file_code += destination_dir_name[dir_name_index]
             dir_name_index += 1
         return file_code.strip().upper()
+
+    @staticmethod
+    def open_file_with_system_application(filepath):
+        """
+        System agnostic file opener
+        :param filepath: str path to file that will be opened
+        :return:
+        """
+
+        system_identifier = sys.platform
+
+        if system_identifier.lower().startswith("linux"):
+            subprocess.call(('xdg-open', filepath))
+            return
+        if system_identifier.lower().startswith("darwin"):
+            subprocess.call(('open', filepath))
+            return
+        else:
+            os.startfile(filepath)
+            return
+
+
 
 
 class GuiHandler:
@@ -667,7 +691,7 @@ class Archivist:
     Class for executing main archiving procedure
     """
 
-    def __init__(self, files_to_archive_directory: str, records_drive_path: str,
+    def __init__(self, files_to_archive_directory: str, opened_copies_directory: str, records_drive_path: str,
                  file_to_archive: ArchivalFile = None):
 
         self.files_to_archive_directory = files_to_archive_directory
@@ -677,6 +701,15 @@ class Archivist:
             except Exception as e:
                 print(e)
                 print(f"error from trying to make {files_to_archive_directory}")
+
+        self.opened_copies_directory = opened_copies_directory
+        if not os.path.exists(opened_copies_directory):
+            try:
+                os.mkdir(opened_copies_directory)
+            except Exception as e:
+                print(e)
+                print(f"error from trying to make {opened_copies_directory}")
+
 
         self.records_drive_path = records_drive_path
         self.gui = GuiHandler()
@@ -708,6 +741,22 @@ class Archivist:
         else:
             self.email = welcome_window_results["Archivist Email"]
             return
+
+    def open_file_copy(self, filepath: str = ''):
+        """
+        Creates a copy of the file in the opened_copies_directory directory and opens that copy. Will open
+        self.file_to_archive if no filepath parameter is given
+        :return: None
+        """
+        if not filepath:
+            filepath = self.file_to_archive.current_path
+        timestamp = str(time.time()).split(".")[0]
+        filename = ArchiverHelpers.split_path(filepath)[-1]
+        copies_dir = os.path.join(os.getcwd(), self.opened_copies_directory)
+        copy_path = os.path.join(copies_dir, (timestamp + "_" + filename))
+        shutil.copyfile(src=filepath, dst=copy_path)
+        ArchiverHelpers.open_file_with_system_application(copy_path)
+        return
 
     def files_to_archive(self, archiver_dir_path=None):
         """
@@ -783,7 +832,8 @@ class Archivist:
         filename = self.file_to_archive.new_filename
         if not filename:
             filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
-        research["Files"] = self.researcher.similar_filename_paths(original_filename= filename, duration= 6, similarity_threshold= 72, max_paths= 7)
+        research["Files"] = self.researcher.similar_filename_paths(original_filename= filename, duration= 6,
+                                                                   similarity_threshold= 72, max_paths= 7)
 
         #TODO get destinations
         return research
