@@ -40,7 +40,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'E7.2 - VE Workshop Minutes, Summaries, Final Reports', 'E8 - Program and Design Meeting Minutes',
                      'F1 - Bid and Contract Award Correspondence', 'F1.1 - Executive Architect Correspondences',
                      'F1.2 - Special Consultants Correspondences', 'F1.4 - PPC and PP',
-                     'F1.5 - Office of the President to.from', 'F1.6 - General Counsel Correspondences',
+                     'F1.5 - Office of the President Correspondences', 'F1.6 - General Counsel Correspondences',
                      'F1.7 - Pre-Qualification', 'F1.8 - Other', 'F10 - Escrow Agreement',
                      'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
                      'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
@@ -50,11 +50,8 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G1.4 - PPC and PP. Certified Payroll', 'G1.5 - Geotechnical Engineer to.from',
                      'G1.6 - Testing and Inspection to Laboratory to.from', 'G1.7 - General Counsel to.from',
                      'G1.8 - Other', 'G10 - Testing and Inspection Reports.Other',
-                     'G11 - Proposal Request. Bulletins. Contractors Response',
-                     'G11.1 - Proposal Request 1 with back up', 'G11.2 - Proposal Request 2',
-                     'G11.3 - Proposal Request 3', 'G12 - Request for Information RFI',
+                     'G11 - Proposal Requests. Bulletins. Contractors Response', 'G12 - Request for Information RFI',
                      'G13 - Letter of Instruction LOI', 'G14 - User Request Change in Scope', 'G15 - Change Order',
-                     'G15.1 - Change Order 1 with back up', 'G15.2 - Change Order 2', 'G15.3 - Change Order 3',
                      'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist', 'G19 - NOC',
                      'G2 - Certificate of Payment', 'G20 - Warranty Deficiency', 'G21 - Construction Photos',
                      'G22 - Claims. Public Records Act', 'G22.1 - Claims Confidential', 'G23 - Commissioning',
@@ -167,7 +164,8 @@ class GuiHandler:
         listbox_height = 18
         destination_gui_layout = [
             [sg.Text(f"Choose a location for:")],
-            [sg.InputText(current_filename, use_readonly_for_disable=True, disabled=True, key='Inert Filename')],
+            [sg.InputText(current_filename, use_readonly_for_disable=True, disabled=True, key='Inert Filename'),
+             sg.Button("Open Copy")],
             [sg.Text("Default Project:"), sg.Text(default_project_num)],
             [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
@@ -223,7 +221,7 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def __init__(self, current_path: str, project: str, destination_path: str = None, new_filename: str = None,
+    def __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
                  notes: str = None, destination_dir: str = None):
         """
 
@@ -777,7 +775,7 @@ class Archivist:
                  not (file in FILENAMES_TO_IGNORE or os.path.isdir(os.path.join(archiver_dir_path, file)))]
         return files
 
-    def elicit_destination_selection(self):
+    def retrieve_file_destination_choice(self):
         """
         retrieves
         :return:
@@ -797,6 +795,11 @@ class Archivist:
 
         if (not destination_gui_results["Button Event"]) or destination_gui_results["Button Event"].lower() == "exit":
             self.exit_app()
+
+        #if the user selects the open copy window, open a copy an relaunch the window
+        if destination_gui_results["Button Event"].lower() == "open copy":
+            self.open_file_copy()
+            return self.retrieve_file_destination_choice()
 
         self.default_project_number = destination_gui_results["New Project Number"]
 
@@ -842,6 +845,7 @@ class Archivist:
     def confirm_chosen_file_destination(self):
         """
         spins up the confirmation screen gui and returns true if the desired path has been confirmed by the user.
+        Will perform research if that option was ticked.
         This also will exit the program if the user selects the 'exit' button in the gui.
         :return: bool value of whether to move the file_to_archive to the destination
         """
@@ -880,13 +884,23 @@ class Archivist:
         archived_file_df = pd.DataFrame(data_dict, index=[0, ])
         archived_file_df.to_csv(csv_path, mode='a', index=False, header=False)
 
-    def elicit_files_to_archive(self):
+    def retrieve_file_to_archive(self):
+        """
+        Ensures files exit to be archived and that the next file is queued up as the Archivist.file_to_archive
+        :return:
+        """
         while not self.files_to_archive():
             no_file_error_message = f"No files to archive. Add files to" + os.linesep + f"{self.files_to_archive_directory}"
             self.display_error(no_file_error_message)
 
+        current_file = self.files_to_archive()[0]
+        self.file_to_archive = ArchivalFile(current_path= os.path.join(self.files_to_archive_directory, current_file))
+
+
+
     @staticmethod
     def exit_app():
+        #TODO attempt to delete all the files in the opened_copies directory
         exit()
 
 
@@ -934,16 +948,18 @@ class Tester:
 
 def main():
     csv_filename = "archived_files_archive.csv"
+    opened_files_dir = 'temp'
     csv_filepath = os.path.join(os.getcwd(), csv_filename)
 
     dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
     ppdo_archivist = Archivist(files_to_archive_directory=dir_of_files_to_archive,
+                               opened_copies_directory= os.path.join(os.getcwd(), opened_files_dir),
                                records_drive_path=RECORDS_SERVER_LOCATION)
 
     ppdo_archivist.retrieve_email()
     while True:
-        ppdo_archivist.elicit_files_to_archive()
-        ppdo_archivist.elicit_destination_selection()
+        ppdo_archivist.retrieve_file_to_archive()
+        ppdo_archivist.retrieve_file_destination_choice()
 
         # if there is no default project number and no project number was entered, display error message and restart loop
         if not ppdo_archivist.file_to_archive.project_number:
