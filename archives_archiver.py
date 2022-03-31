@@ -16,7 +16,7 @@ from datetime import datetime
 # pysimplegui_layout
 
 # Environmental Variables
-RECORDS_SERVER_LOCATION = r"""R:\\"""
+RECORDS_SERVER_LOCATION = r"""R:\\""" #TODO how to prevent the four backslashes
 FILENAMES_TO_IGNORE = ["desktop.ini", "desktop.ini"]
 DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 'C - Consultants',
                      'D - Environmental Review Process', 'E - Program and Design',
@@ -140,11 +140,12 @@ class GuiHandler:
 
     def __init__(self):
         self.gui_theme = "DarkTeal6"
+        self.window_close_button_event = "-WINDOW CLOSE ATTEMPTED-"
 
     def make_window(self, window_name: str, window_layout: list):
         sg.theme(self.gui_theme)
         # launch gui
-        dist_window = sg.Window(window_name, window_layout)
+        dist_window = sg.Window(window_name, layout= window_layout, enable_close_attempted_event= True)
         event, values = dist_window.read()
         values["Button Event"] = event
         dist_window.close()
@@ -331,8 +332,7 @@ class ArchivalFile:
 
                 # need to extrapolate the parent directory prefix given the desired destination directory. eg for
                 # destination "F5 - Drawings and Specifications" the parent directory prefix is "F - "
-                destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[
-                                                        0] + " - "  # eg "F - ", "G - ", etc
+                destination_dir_parent_dir_prefix = destination_dir_parent_dir.split(" ")[0] + " - "  # eg "F - ", "G - ", etc
                 parent_dirs = [dir_name for dir_name in new_path_dirs if
                                dir_name.upper().startswith(destination_dir_parent_dir_prefix.upper())]
                 if len(parent_dirs) > 0:
@@ -466,11 +466,25 @@ class ArchivalFile:
             # if we do find a dir that corresponds with the project number...
             if len(dirs_matching_proj_num) == 1:
                 new_path = os.path.join(new_path, dirs_matching_proj_num[0])
-                new_path = path_from_project_num_dir_to_destination(new_path,
-                                                                    self.nested_large_template_destination_dir(),
-                                                                    self.assemble_destination_filename())
+                #look for another project number directory in the dirs of this project number directory
+                proj_num_dir_dirs = list_of_child_dirs(new_path)
+                dirs_matching_proj_num = [dir_name for dir_name in proj_num_dir_dirs if proj_num_in_dir_name(dir_name)]
+
+                # if more than one directory starts with the same project number...
+                if len(dirs_matching_proj_num) > 1:
+                    raise Exception(
+                        f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.")
+
+                if len(dirs_matching_proj_num) == 1:
+                    new_path = os.path.join(new_path, dirs_matching_proj_num[0])
+
+                new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir= new_path,
+                                                                    large_template_destination= self.nested_large_template_destination_dir(),
+                                                                    destination_filename= self.assemble_destination_filename())
                 self.destination_path = new_path
                 return self.destination_path
+
+
 
             self.destination_path = new_path
         return self.destination_path
@@ -724,7 +738,7 @@ class Archivist:
         """
         error_layout = self.gui.error_message_layout(error_message=error_message)
         error_window_results = self.gui.make_window(window_name="ERROR", window_layout=error_layout)
-        if error_window_results["Button Event"].lower() == "exit":
+        if error_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
             self.exit_app()
         return error_window_results["Button Event"].lower() == "ok"
 
@@ -734,7 +748,7 @@ class Archivist:
         welcome_window_results = self.gui.make_window("Welcome!", welcome_window_layout)
 
         # if the user clicks exit, shutdown app
-        if welcome_window_results["Button Event"].lower() == "exit":
+        if welcome_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
             self.exit_app()
         else:
             self.email = welcome_window_results["Archivist Email"]
@@ -793,7 +807,7 @@ class Archivist:
         destination_gui_results = self.gui.make_window(window_name="Enter file and destination info.",
                                                        window_layout=destination_window_layout)
 
-        if (not destination_gui_results["Button Event"]) or destination_gui_results["Button Event"].lower() == "exit":
+        if (not destination_gui_results["Button Event"]) or destination_gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
             self.exit_app()
 
         #if the user selects the open copy window, open a copy an relaunch the window
@@ -808,7 +822,7 @@ class Archivist:
 
         if destination_gui_results["Button Event"].lower() == "ok":
 
-            # use default project number unless new project number wasgiven
+            # use default project number unless new project number was given
             project_num = destination_gui_results["New Project Number"]
             if not project_num:
                 project_num = default_proj_number
@@ -855,7 +869,7 @@ class Archivist:
         except Exception as error:
             except_layout = self.gui.error_message_layout(error_message=str(error))
             gui_results = self.gui.make_window(window_name="Invalid Destination Choices", window_layout=except_layout)
-            if gui_results["Button Event"].lower() == "exit":
+            if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
             return False
 
@@ -865,7 +879,7 @@ class Archivist:
             confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
                                                                    similar_files= similar_files_paths)
             gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
-            if gui_results["Button Event"].lower() == "exit":
+            if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
 
         return gui_results["Button Event"].lower() == "ok"
