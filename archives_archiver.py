@@ -118,7 +118,6 @@ class ArchiverHelpers:
         """
 
         system_identifier = sys.platform
-
         if system_identifier.lower().startswith("linux"):
             subprocess.call(('xdg-open', filepath))
             return
@@ -911,10 +910,17 @@ class Archivist:
         self.file_to_archive = ArchivalFile(current_path= os.path.join(self.files_to_archive_directory, current_file))
 
 
-
-    @staticmethod
-    def exit_app():
-        #TODO attempt to delete all the files in the opened_copies directory
+    def exit_app(self):
+        #Attempt to delete all the files in the self.opened_copies_directory
+        open_copies_dir_path = os.path.join(os.getcwd(), self.opened_copies_directory)
+        opened_file_copies = [os.path.join(open_copies_dir_path, f) for f in os.listdir(open_copies_dir_path) if
+                              os.path.isfile(os.path.join(open_copies_dir_path, f))]
+        for opened_filepath in opened_file_copies:
+            try:
+                os.remove(opened_filepath)
+            except Exception as e:
+                print(f"Failed at deleting a temp file: \n {opened_filepath}\n Error: \n {e}")
+                continue
         exit()
 
 
