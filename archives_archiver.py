@@ -1,3 +1,4 @@
+import base64
 import os
 import logging
 import subprocess
@@ -11,6 +12,9 @@ import PySimpleGUI as sg
 from thefuzz import fuzz
 from collections import defaultdict
 from datetime import datetime
+
+#Version Number
+__version__ = 1.0
 
 # Typing Aliases
 # pysimplegui_layout
@@ -137,9 +141,25 @@ class GuiHandler:
 
         """
 
-    def __init__(self):
-        self.gui_theme = "DarkTeal6"
+    def __init__(self, file_icon_path = None, folder_icon_path = None):
+        self.gui_theme = random.choice(["DarkTeal6", "Green", "LightBrown11", "LightPurple", "SandyBeach", "DarkGreen4",
+                                        "BluePurple", "Reddit", "DarkBrown5", "DarkBlue8", "LightGreen6", "LightBlue7",
+                                        "DarkGreen2", "Kayak", "LightBrown3", "LightBrown1", "LightTeal", "Tan",
+                                        "TealMono", "LightBrown4", "LightBrown3", "LightBrown2", "DarkPurple4",
+                                        "DarkPurple", "DarkGreen5", "Dark Brown3", "DarkAmber", "DarkGreen4",
+                                        "DarkGrey6", "DarkGrey2", "DarkTea1", "LightGrey6", "DarkBrown6"])
         self.window_close_button_event = "-WINDOW CLOSE ATTEMPTED-"
+        self.file_icon = None
+        self.folder_icon = None
+
+        if file_icon_path:
+            with open(file_icon_path, "rb") as image:
+                self.file_icon = base64.b64encode(image.read())
+
+        if folder_icon_path:
+            with open(folder_icon_path, "rb") as image:
+                self.folder_icon = base64.b64encode(image.read())
+
 
     def make_window(self, window_name: str, window_layout: list):
         sg.theme(self.gui_theme)
@@ -149,6 +169,35 @@ class GuiHandler:
         values["Button Event"] = event
         dist_window.close()
         return defaultdict(None, values)
+
+    def directory_treedata(self, parent_dir, dir_name):
+        """
+
+        https://github.com/PySimpleGUI/PySimpleGUI/blob/master/DemoPrograms/Demo_Tree_Element.py
+        :param parent_dir:
+        :param dir_name:
+        :return:
+        """
+
+        def add_files_in_folder(treedata: sg.TreeData, parent, dirname, file_icon_bytes=None, folder_icon_bytes=None):
+            files = os.listdir(dirname)
+            for f in files:
+                fullname = os.path.join(dirname, f)
+                if os.path.isdir(fullname):  # if it's a folder, add folder and recurse
+                    # add folder to tree
+                    treedata.insert(parent, fullname, f, values=[], icon= folder_icon_bytes)
+                    add_files_in_folder(treedata, fullname, fullname, file_icon_bytes=file_icon_bytes,
+                                        folder_icon_bytes=folder_icon_bytes)
+                else:
+                    # add file to tree
+                    treedata.insert(parent, fullname, f, values=[os.stat(fullname).st_size / 1000], icon= file_icon_bytes)
+
+        tree_data = sg.TreeData()
+        add_files_in_folder(tree_data, parent=parent_dir, dirname=dir_name, file_icon_bytes=self.file_icon,
+                            folder_icon_bytes=self.folder_icon)
+        return tree_data
+
+
 
     def welcome_layout(self):
         welcome_gui_layout = [
@@ -178,14 +227,18 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self, destination_path: str, similar_files: list[str] = []):
-        # TODO make this window. Should it have
+    def confirmation_layout(self, destination_path: str, similar_files: list[str] = [], dir_trees: list[sg.TreeData] = []):
+        """
+
+        :param destination_path:
+        :param similar_files:
+        :param dir_trees:
+        :return:
+        """
         treedata = sg.TreeData()
 
         confirmation_gui_layout = [
-            [sg.Text("Confirm this is correct location for this file:")],
-            [sg.Text(destination_path)]
-        ]
+            [sg.Text("Confirm this is correct location for this file:"), sg.Text(destination_path)]]
 
         #if there is a list of similarly named files
         if similar_files:
@@ -193,9 +246,31 @@ class GuiHandler:
             filepaths_text = ", \n".join(similar_files)
             confirmation_gui_layout.append([sg.Text(filepaths_text)])
 
+        #create and append directory example structures into layout
+        if dir_trees:
+            confirmation_gui_layout.append([sg.Text("Examples of directories with the same filing codes: ")])
+            trees = []
+            for tree in dir_trees:
+                #only use max of three examples
+                if len(trees)  == 3:
+                    break
+
+                trees.append(sg.Tree(data= tree,
+                                     headings=['Size (KB)', ],
+                                     auto_size_columns=True,
+                                     select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
+                                     num_rows=6,
+                                     col0_width=40,
+                                     row_height= 32,
+                                     show_expanded=False,
+                                     enable_events=False,
+                                     expand_x=True,
+                                     expand_y=True,
+                                    ))
+
+            confirmation_gui_layout.append([trees])
+
         confirmation_gui_layout += [
-            [sg.Text("Similar directories (Coming Soon):")],
-            # [sg.Tree(data= treedata)],
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("Exit")]
         ]
         return confirmation_gui_layout
@@ -484,7 +559,6 @@ class ArchivalFile:
                 return self.destination_path
 
 
-
             self.destination_path = new_path
         return self.destination_path
 
@@ -541,7 +615,7 @@ class Researcher:
                                   "117xx  Handicap ADA Planning Documents and Studies",
                                   "130xx  Campus Reference Materials", "140xx  Storm Water Management"]
 
-    def similar_filename_paths(self, original_filename, duration=10, similarity_threshold=72, max_paths=10):
+    def similar_filename_paths(self, original_filename, duration=6, similarity_threshold=72, max_paths=10):
         """
 
         :param original_filename: (not the path)
@@ -599,8 +673,8 @@ class Researcher:
         return similarly_named_files
 
 
-    def randomized_destination_examples(self, dest_dir, num_of_examples=4,
-                                        duration=7, files_in_example=3):
+    def randomized_destination_examples(self, dest_dir, num_of_examples=3,
+                                        duration=4, files_in_example=3):
         """
         Starting at a random location in the directories within the xx level directories, search for examples of the
         same destination directory with at least a sufficient number of files in it to be used as examples --
@@ -686,25 +760,16 @@ class Researcher:
 
         return example_dir_paths
 
-    def destination_examples(self, destination_dir, duration=7, max_examples=6):
-        # TODO: if randomized_destination_examples() is not fast enough, we'll combine a cache with that function to make it quicker within this function
-
-        def randomized_destination_examples_from_cache():
-            pass
-
-        def randomized_destination_examples_from_search():
-            pass
-        pass
-
 
 class Archivist:
     """
     Class for executing main archiving procedure
     """
 
-    def __init__(self, files_to_archive_directory: str, opened_copies_directory: str, records_drive_path: str,
-                 file_to_archive: ArchivalFile = None):
+    def __init__(self, files_to_archive_directory: str, app_files_directory: str, records_drive_path: str,
+                 gui_file_icon: str, gui_dir_icon: str, file_to_archive: ArchivalFile = None):
 
+        ##Build necessary directory structiure###
         self.files_to_archive_directory = files_to_archive_directory
         if not os.path.exists(files_to_archive_directory):
             try:
@@ -713,17 +778,32 @@ class Archivist:
                 print(e)
                 print(f"error from trying to make {files_to_archive_directory}")
 
-        self.opened_copies_directory = opened_copies_directory
-        if not os.path.exists(opened_copies_directory):
+        self.app_files_directory = app_files_directory
+        if not os.path.exists(self.app_files_directory):
             try:
-                os.mkdir(opened_copies_directory)
+                os.mkdir(self.app_files_directory)
             except Exception as e:
                 print(e)
-                print(f"error from trying to make {opened_copies_directory}")
+                print(f"error from trying to make {self.app_files_directory}")
 
+        self.opened_copies_directory = os.path.join(self.app_files_directory, 'temp')
+        if not os.path.exists(self.opened_copies_directory):
+            try:
+                os.mkdir(self.opened_copies_directory)
+            except Exception as e:
+                print(e)
+                print(f"error from trying to make {self.opened_copies_directory}")
+
+        gui_file_icon_path = ''
+        if gui_file_icon:
+            gui_file_icon_path = os.path.join(self.app_files_directory, gui_file_icon)
+
+        gui_dir_icon_path = ''
+        if gui_dir_icon:
+            gui_dir_icon_path = os.path.join(self.app_files_directory, gui_dir_icon)
 
         self.records_drive_path = records_drive_path
-        self.gui = GuiHandler()
+        self.gui = GuiHandler(file_icon_path=gui_file_icon_path, folder_icon_path=gui_dir_icon_path)
         self.file_to_archive = file_to_archive
         self.email = None
         self.default_project_number = None
@@ -844,15 +924,16 @@ class Archivist:
         return self.file_to_archive
 
     def research_for_archival_file(self):
-        research = {"Files": [], "Destinations": []}
         filename = self.file_to_archive.new_filename
         if not filename:
             filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
-        research["Files"] = self.researcher.similar_filename_paths(original_filename= filename, duration= 6,
+        files = self.researcher.similar_filename_paths(original_filename= filename, duration= 6,
                                                                    similarity_threshold= 72, max_paths= 7)
 
-        #TODO get destinations
-        return research
+        destinations = self.researcher.randomized_destination_examples(
+            dest_dir=self.file_to_archive.destination_dir)
+
+        return files, destinations
 
 
     def confirm_chosen_file_destination(self):
@@ -860,7 +941,9 @@ class Archivist:
         spins up the confirmation screen gui and returns true if the desired path has been confirmed by the user.
         Will perform research if that option was ticked.
         This also will exit the program if the user selects the 'exit' button in the gui.
-        :return: bool value of whether to move the file_to_archive to the destination
+        :param gui_file_icon:
+        :param gui_dir_icon:
+        :return:
         """
 
         try:
@@ -873,10 +956,13 @@ class Archivist:
             return False
 
         else:
-            research_results = self.research_for_archival_file()
-            similar_files_paths = [path['filepath'] for path in research_results["Files"]]
+            file_examples, destination_examples = self.research_for_archival_file()
+            similar_files_paths = [path['filepath'] for path in file_examples]
+            #create tree data structures from directory paths
+            destination_examples = [self.gui.directory_treedata('', path) for path in destination_examples]
             confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
-                                                                   similar_files= similar_files_paths)
+                                                                   similar_files= similar_files_paths,
+                                                                   dir_trees= destination_examples)
             gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
             if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
@@ -909,7 +995,6 @@ class Archivist:
         current_file = self.files_to_archive()[0]
         self.file_to_archive = ArchivalFile(current_path= os.path.join(self.files_to_archive_directory, current_file))
 
-
     def exit_app(self):
         #Attempt to delete all the files in the self.opened_copies_directory
         open_copies_dir_path = os.path.join(os.getcwd(), self.opened_copies_directory)
@@ -928,14 +1013,24 @@ class Tester:
 
     @staticmethod
     def test_gui():
-        window_test = GuiHandler()
-        # welcome_res = window_test.make_window("Welcome", window_test.welcome_layout())
-        dest_layout = window_test.destination_choice_layout(dir_choices=DIRECTORY_CHOICES, default_project_num="3238",
-                                                            file_exists_to_archive=True)
-        dest_results = window_test.make_window("Choose a file destination.", dest_layout)
-        fail_reason = "Could not find necessary sub-directories to reconcile desired destination path."
-        window_test.make_window("Could not archive file in desired destination.",
-                                window_layout=window_test.failed_destination_layout(fail_reason, str(os.getcwd())))
+        dir = r"C:\Users\adankert\Google Drive\GitHub\archives_archiver\app_files"
+        file_icon_path = os.path.join(dir, "file_3d_32x32.png")
+        folder_icon_path = os.path.join(dir, "folder_3d_32x32.png")
+        gui = GuiHandler(file_icon_path=file_icon_path, folder_icon_path=folder_icon_path)
+
+        path_examples = [r"R:\49xx   Long Marine Lab\4900\4900-007\F5 - Drawings and Specifications",
+                         r"R:\49xx   Long Marine Lab\4900\4900-021\A - General\A2 - Working File",
+                         r"R:\27xx   Applied Sciences Baskin Engineering\2703\2703\F8 - Contract"]
+
+        forest = []
+        for example in path_examples:
+            forest.append(gui.directory_treedata('', example))
+
+        gui.make_window("Test Confirm",
+                        gui.confirmation_layout(r"C:\Users\adankert\Google Drive\GitHub\archives_archiver\app_files",
+                                                similar_files=[], dir_trees=forest))
+
+
 
     @staticmethod
     def test_assemble_destination_path():
@@ -968,13 +1063,17 @@ class Tester:
 
 def main():
     csv_filename = "archived_files_archive.csv"
-    opened_files_dir = 'temp'
+    app_files_dir = 'app_files'
+    gui_file_icon_filename = "file_3d_32x32.png"
+    gui_dir_icon_filename = "folder_3d_32x32.png"
     csv_filepath = os.path.join(os.getcwd(), csv_filename)
 
     dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
     ppdo_archivist = Archivist(files_to_archive_directory=dir_of_files_to_archive,
-                               opened_copies_directory= os.path.join(os.getcwd(), opened_files_dir),
-                               records_drive_path=RECORDS_SERVER_LOCATION)
+                               app_files_directory=os.path.join(os.getcwd(), app_files_dir),
+                               records_drive_path=RECORDS_SERVER_LOCATION,
+                               gui_file_icon=gui_file_icon_filename,
+                               gui_dir_icon=gui_dir_icon_filename)
 
     ppdo_archivist.retrieve_email()
     while True:
