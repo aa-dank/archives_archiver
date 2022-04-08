@@ -14,7 +14,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.0
+__version__ = 1.1
 
 # Typing Aliases
 # pysimplegui_layout
@@ -132,6 +132,20 @@ class ArchiverHelpers:
             os.startfile(filepath)
             return
 
+    @staticmethod
+    def clean_path(path):
+        '''Process a path string such that it can be used regardless of the os and regardless of whether its length
+        surpasses the limit in windows file systems'''
+        path = path.replace('/', os.sep).replace('\\', os.sep)
+        if os.sep == '\\' and '\\\\?\\' not in path:
+            # fix for Windows 260 char limit
+            relative_levels = len([directory for directory in path.split(os.sep) if directory == '..'])
+            cwd = [directory for directory in os.getcwd().split(os.sep)] if ':' not in path else []
+            path = '\\\\?\\' + os.sep.join(cwd[:len(cwd) - relative_levels] \
+                                           + [directory for directory in path.split(os.sep) if directory != ''][
+                                             relative_levels:])
+        return path
+
 
 
 
@@ -146,8 +160,8 @@ class GuiHandler:
                                         "BluePurple", "Reddit", "DarkBrown5", "DarkBlue8", "LightGreen6", "LightBlue7",
                                         "DarkGreen2", "Kayak", "LightBrown3", "LightBrown1", "LightTeal", "Tan",
                                         "TealMono", "LightBrown4", "LightBrown3", "LightBrown2", "DarkPurple4",
-                                        "DarkPurple", "DarkGreen5", "Dark Brown3", "DarkAmber", "DarkGreen4",
-                                        "DarkGrey6", "DarkGrey2", "DarkTea1", "LightGrey6", "DarkBrown6"])
+                                        "DarkPurple", "DarkGreen5", "Dark Brown3", "DarkAmber", "DarkGrey6",
+                                        "DarkGrey2", "DarkTea1", "LightGrey6", "DarkBrown6"])
         self.window_close_button_event = "-WINDOW CLOSE ATTEMPTED-"
         self.file_icon = None
         self.folder_icon = None
@@ -182,21 +196,20 @@ class GuiHandler:
         def add_files_in_folder(treedata: sg.TreeData, parent, dirname, file_icon_bytes=None, folder_icon_bytes=None):
             files = os.listdir(dirname)
             for f in files:
-                fullname = os.path.join(dirname, f)
-                if os.path.isdir(fullname):  # if it's a folder, add folder and recurse
+                fullpath = ArchiverHelpers.clean_path(os.path.join(dirname, f))
+                if os.path.isdir(fullpath):  # if it's a folder, add folder and recurse
                     # add folder to tree
-                    treedata.insert(parent, fullname, f, values=[], icon= folder_icon_bytes)
-                    add_files_in_folder(treedata, fullname, fullname, file_icon_bytes=file_icon_bytes,
+                    treedata.insert(parent, fullpath, f, values=[], icon= folder_icon_bytes)
+                    add_files_in_folder(treedata, fullpath, fullpath, file_icon_bytes=file_icon_bytes,
                                         folder_icon_bytes=folder_icon_bytes)
                 else:
                     # add file to tree
-                    treedata.insert(parent, fullname, f, values=[os.stat(fullname).st_size / 1000], icon= file_icon_bytes)
+                    treedata.insert(parent, fullpath, f, values=[os.stat(fullpath).st_size / 1000], icon= file_icon_bytes)
 
         tree_data = sg.TreeData()
         add_files_in_folder(tree_data, parent=parent_dir, dirname=dir_name, file_icon_bytes=self.file_icon,
                             folder_icon_bytes=self.folder_icon)
         return tree_data
-
 
 
     def welcome_layout(self):
@@ -206,22 +219,26 @@ class GuiHandler:
         ]
         return welcome_gui_layout
 
-    def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None):
+    def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None,
+                                  research_default: bool = True):
         dir_choices.sort()
         # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
         listbox_height = 18
         destination_gui_layout = [
             [sg.Text(f"Choose a location for:")],
-            [sg.InputText(current_filename, use_readonly_for_disable=True, disabled=True, key='Inert Filename'),
-             sg.Button("Open Copy")],
+            [sg.Input(default_text=current_filename, use_readonly_for_disable=True, disabled=True,
+                      background_color='#F7F3EC', text_color="black", key='Inert Filename'), sg.Button("Open Copy")],
             [sg.Text("Default Project:"), sg.Text(default_project_num)],
             [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
             [sg.Text("Choose Directory to for file:"), sg.Listbox(values=dir_choices, key="Directory Choice",
                                                                   size=(listbox_width, listbox_height))],
             [sg.Text("Alternatively, Enter the full path to directory where the file has been archived:")],
-            [sg.Input(key="Manual Path")], [sg.Text("Notes: ")], [sg.Input(key="Notes")]
+            [sg.Input(key="Manual Path")],
+            [sg.Checkbox(text="Include research with confirmation", default=research_default, key="Research")],
+            [sg.Text("Notes: ")],
+            [sg.Input(key="Notes")]
         ]
 
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
@@ -807,6 +824,7 @@ class Archivist:
         self.file_to_archive = file_to_archive
         self.email = None
         self.default_project_number = None
+        self.perform_research = True
         self.researcher = Researcher()
 
     def display_error(self, error_message) -> bool:
@@ -882,7 +900,8 @@ class Archivist:
         current_file = ArchiverHelpers.split_path(files_in_archiving_dir[0])[-1]
         destination_window_layout = self.gui.destination_choice_layout(dir_choices=DIRECTORY_CHOICES,
                                                                        current_filename=current_file,
-                                                                       default_project_num=default_proj_number)
+                                                                       default_project_num=default_proj_number,
+                                                                       research_default=self.perform_research)
         destination_gui_results = self.gui.make_window(window_name="Enter file and destination info.",
                                                        window_layout=destination_window_layout)
 
@@ -907,6 +926,9 @@ class Archivist:
                 project_num = default_proj_number
 
             self.default_project_number = project_num
+
+            #set the default research setting
+            self.perform_research = destination_gui_results["Research"]
 
             # TODO following line needs to be changed if the directory list item in gui layout changes
             directory_choice = destination_gui_results["Directory Choice"][0]
@@ -956,10 +978,15 @@ class Archivist:
             return False
 
         else:
-            file_examples, destination_examples = self.research_for_archival_file()
-            similar_files_paths = [path['filepath'] for path in file_examples]
-            #create tree data structures from directory paths
-            destination_examples = [self.gui.directory_treedata('', path) for path in destination_examples]
+            #if we do research
+            similar_files_paths, destination_examples = [], []
+            if self.perform_research:
+                file_examples, destination_examples = self.research_for_archival_file()
+                similar_files_paths = [path['filepath'] for path in file_examples]
+
+                #create tree data structures from directory paths
+                destination_examples = [self.gui.directory_treedata('', path) for path in destination_examples]
+
             confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
                                                                    similar_files= similar_files_paths,
                                                                    dir_trees= destination_examples)
@@ -1094,7 +1121,7 @@ def main():
         if destination_confirmed:
             ppdo_archivist.archive_file()
             ppdo_archivist.add_archived_file_to_csv(csv_filepath)
-        print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
+            print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
 if __name__ == "__main__":
