@@ -1,11 +1,12 @@
 import base64
 import os
 import logging
+import random
 import subprocess
 import shutil
 import sys
+import threading
 import time
-import random
 import pandas as pd
 import PySimpleGUI as sg
 
@@ -14,7 +15,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.1
+__version__ = 1.12
 
 # Typing Aliases
 # pysimplegui_layout
@@ -49,11 +50,13 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
                      'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
                      'F5 - Drawings and Spec', 'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract',
-                     'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence', 'G1.1 - Contractor to.from',
-                     'G1.2 - Executive Architect to.from', 'G1.3 - Users.Building Committee.Campus to.from',
-                     'G1.4 - PPC and PP. Certified Payroll', 'G1.5 - Geotechnical Engineer to.from',
-                     'G1.6 - Testing and Inspection to Laboratory to.from', 'G1.7 - General Counsel to.from',
-                     'G1.8 - Other', 'G10 - Testing and Inspection Reports.Other',
+                     'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence',
+                     'G1.1 - Contractor Correspondences', 'G1.2 - Executive Architect Correspondences',
+                     'G1.3 - Users.Building Committee.Campus Correspondences', 'G1.4 - PPC and PP. Certified Payroll',
+                     'G1.5 - Geotechnical Engineer Correspondences',
+                     'G1.6 - Testing and Inspection to Laboratory Correspondences',
+                     'G1.7 - General Counsel Correspondences', 'G1.8 - Other',
+                     'G10 - Testing and Inspection Reports.Other',
                      'G11 - Proposal Requests. Bulletins. Contractors Response', 'G12 - Request for Information RFI',
                      'G13 - Letter of Instruction LOI', 'G14 - User Request Change in Scope', 'G15 - Change Order',
                      'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist', 'G19 - NOC',
@@ -161,7 +164,7 @@ class GuiHandler:
                                         "DarkGreen2", "Kayak", "LightBrown3", "LightBrown1", "LightTeal", "Tan",
                                         "TealMono", "LightBrown4", "LightBrown3", "LightBrown2", "DarkPurple4",
                                         "DarkPurple", "DarkGreen5", "Dark Brown3", "DarkAmber", "DarkGrey6",
-                                        "DarkGrey2", "DarkTea1", "LightGrey6", "DarkBrown6"])
+                                        "DarkGrey2", "DarkTeal1", "LightGrey6", "DarkBrown6"])
         self.window_close_button_event = "-WINDOW CLOSE ATTEMPTED-"
         self.file_icon = None
         self.folder_icon = None
@@ -184,9 +187,9 @@ class GuiHandler:
         dist_window.close()
         return defaultdict(None, values)
 
-    def directory_treedata(self, parent_dir, dir_name):
+    def directory_treedata(self, parent_dir, dir_name) -> sg.TreeData:
         """
-
+        Creates PysimpleGUI.TreeData ogjects from a given directory
         https://github.com/PySimpleGUI/PySimpleGUI/blob/master/DemoPrograms/Demo_Tree_Element.py
         :param parent_dir:
         :param dir_name:
@@ -325,8 +328,8 @@ class ArchivalFile:
         :param destination_dir: chosen directory from the directory templates
         """
         self.current_path = current_path
-        self.size = None
-        if self.current_path:
+        self.size = 0
+        if self.current_path and os.path.exists(self.current_path):
             self.size = str(os.path.getsize(current_path))
         self.project_number = project
         self.destination_dir = destination_dir
@@ -334,6 +337,8 @@ class ArchivalFile:
         self.notes = notes
         self.destination_path = destination_path
         self.datetime_archived = None
+        if destination_dir:
+            self.file_code = ArchiverHelpers.file_code_from_destination_dir(destination_dir)
 
     def assemble_destination_filename(self):
         """
@@ -353,7 +358,7 @@ class ArchivalFile:
         if not split_dest_components[-1] == extension:
             split_dest_components.append(extension)
 
-        prefix_list = [self.project_number, ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)]
+        prefix_list = [self.project_number, self.file_code]
         split_dest_components = prefix_list + split_dest_components
         destination_filename = ".".join(split_dest_components)
         return destination_filename
@@ -562,7 +567,7 @@ class ArchivalFile:
                 dirs_matching_proj_num = [dir_name for dir_name in proj_num_dir_dirs if proj_num_in_dir_name(dir_name)]
 
                 # if more than one directory starts with the same project number...
-                if len(dirs_matching_proj_num) > 1:
+                if not len(dirs_matching_proj_num) == 1:
                     raise Exception(
                         f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.")
 
@@ -592,6 +597,30 @@ class ArchivalFile:
                 "file_size": self.size, "notes": self.notes}
         return defaultdict(None, dict)
 
+    def check_permissions(self):
+        """
+        Returns a string describing issues with permissions that may arise when trying to archive the file.
+        :return:
+        """
+        if not os.path.exists(self.current_path):
+            return f"The file no longer exists {self.current_path}"
+
+        issues_found = ''
+        try:
+            os.rename(self.current_path, self.current_path)
+        except OSError as e:
+            issues_found = "Access-error on file" + '! \n' + str(e) + "\n"
+
+        if not os.access(self.current_path, os.R_OK):
+            issues_found += "No read access for the file.\n"
+        if not os.access(self.current_path, os.W_OK):
+            issues_found += "No write access for the file.\n"
+        if not os.access(self.current_path, os.X_OK):
+            issues_found += "No execution access for the file.\n"
+        return issues_found
+
+
+
     def archive(self, destination=None):
 
         # if the file has already been archived return the destination path
@@ -614,8 +643,15 @@ class ArchivalFile:
         if not os.path.exists(destination_dir_path):
             os.makedirs(destination_dir_path)
         self.datetime_archived = datetime.now()
-        shutil.copyfile(src=self.current_path, dst=self.destination_path)
-        os.remove(self.current_path)
+        try:
+            shutil.copyfile(src=self.current_path, dst=self.destination_path)
+        except Exception as e:
+            return False, e
+        try:
+            os.remove(self.current_path)
+            return True, ''
+        except Exception as e:
+            return False, e
 
 
 class Researcher:
@@ -683,10 +719,10 @@ class Researcher:
                         similarly_named_files.append({"filepath": similar_file_filepath, "ratio": ratio})
                         found_similar_file = True
                         break
-
-                if found_similar_file:
+                current_time = time.time()
+                if found_similar_file or (current_time - start_time) > duration:
                     break
-            current_time = time.time()
+
         return similarly_named_files
 
 
@@ -913,7 +949,6 @@ class Archivist:
             self.open_file_copy()
             return self.retrieve_file_destination_choice()
 
-        self.default_project_number = destination_gui_results["New Project Number"]
 
         if destination_gui_results["Button Event"].lower() == "back":
             return ""
@@ -930,8 +965,10 @@ class Archivist:
             #set the default research setting
             self.perform_research = destination_gui_results["Research"]
 
-            # TODO following line needs to be changed if the directory list item in gui layout changes
-            directory_choice = destination_gui_results["Directory Choice"][0]
+            directory_choice = ''
+            if destination_gui_results["Directory Choice"]:
+                directory_choice = destination_gui_results["Directory Choice"][0]
+
             manual_archived_path = destination_gui_results["Manual Path"]
             file_notes = destination_gui_results["Notes"]
             new_filename = destination_gui_results["Filename"]
@@ -953,7 +990,7 @@ class Archivist:
                                                                    similarity_threshold= 72, max_paths= 7)
 
         destinations = self.researcher.randomized_destination_examples(
-            dest_dir=self.file_to_archive.destination_dir)
+            dest_dir=self.file_to_archive.destination_dir,)
 
         return files, destinations
 
@@ -997,7 +1034,32 @@ class Archivist:
         return gui_results["Button Event"].lower() == "ok"
 
     def archive_file(self):
-        self.file_to_archive.archive()
+
+        #if there is a path collision throw an error
+        if self.file_to_archive.destination_path and os.path.exists(self.file_to_archive.destination_path):
+            self.display_error(
+                error_message=f"A file exists in that location with the same path: {self.file_to_archive.destination_path}")
+            return
+
+        #try to archive the file (kinda fraught) and display any isssues that might have come up.
+        archiving_successful, archive_exception = self.file_to_archive.archive()
+        if not archiving_successful:
+            permission_issue = self.file_to_archive.check_permissions()
+            permissions_error_message = "When attempting to duplicate the file to the records drive, \n" +\
+                                        "the application ran into file access issues: \n"
+
+            if archive_exception:
+                permissions_error_message += f"The shutil.copyfile() call produced this error: \n {archive_exception}"
+            if permission_issue:
+                permissions_error_message += f"Testing the permissions of the file yielded: \n {permission_issue}"
+
+            self.display_error(error_message=permissions_error_message)
+            return
+
+
+
+
+
 
     def add_archived_file_to_csv(self, csv_path):
         """
@@ -1087,6 +1149,12 @@ class Tester:
         directory_examples = searcher.randomized_destination_examples(dest_dir= dir_choice, duration= 18)
         [print(example) for example in directory_examples]
 
+    @staticmethod
+    def test_loading_screen():
+        pass
+
+
+
 
 def main():
     csv_filename = "archived_files_archive.csv"
@@ -1128,4 +1196,5 @@ if __name__ == "__main__":
     # Tester.test_gui()
     # Tester.test_assemble_destination_path()
     # Tester.test_researcher()
+    # Tester.test_loading_screen()
     main()

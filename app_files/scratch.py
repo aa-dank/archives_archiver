@@ -88,3 +88,45 @@ def resize_image(path, new_path, dims = (32,32)):
     foo2 = foo.resize(dims, Image.ANTIALIAS)
     foo2.save(new_path, quality=95)
     return
+
+# First effort to make a gui run while the program does research
+def async_research(self):
+    async def find_similar_files(archivist, a_filename):
+        return archivist.researcher.similar_filename_paths(original_filename= filename, duration= 6,
+                                                               similarity_threshold= 72, max_paths= 7)
+
+    async def find_similar_dirs(archivist, dest):
+        return archivist.researcher.randomized_destination_examples(
+        dest_dir=dest)
+
+
+    async def make_gui_waiting_window(gui_handler: GuiHandler):
+        gui_handler.make_window("Occupied", window_layout= [[sg.Text("Performing Research")]])
+
+    async def perform_research(archivist : Archivist, archivist_file):
+        filename = ArchiverHelpers.split_path(archivist.file_to_archive.current_path)[-1]
+        dest = archivist.file_to_archive.destination_dir
+        similar_files_task = asyncio.loop.create_task(find_similar_files(archivist=archivist,a_filename=filename))
+        similar_dirs_task = asyncio.loop.create_task(find_similar_dirs(archivist=archivist, dest=dest))
+        gui_task = asyncio.loop.create_task(archivist.gui)
+
+    #second effort at a loading window during research process
+    def loading_window(self, name, layout, function):
+
+        def function_thread(window: sg.Window, the_function = function):
+            results = function()
+            window.write_event_value('-THREAD DONE-', '')
+            return results
+
+        def function_threading():
+            threading.Thread(target=function_thread, args=(window, function,), daemon=True).start()
+            print("function threaded")
+
+        window = sg.Window(name, layout,)
+        while True:
+            event, values = window.read()
+            function_threading()
+            if event == '-THREAD DONE-':
+                print("thread complete.")
+                break
+        window.close()
