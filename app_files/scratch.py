@@ -110,23 +110,58 @@ def async_research(self):
         similar_dirs_task = asyncio.loop.create_task(find_similar_dirs(archivist=archivist, dest=dest))
         gui_task = asyncio.loop.create_task(archivist.gui)
 
-    #second effort at a loading window during research process
-    def loading_window(self, name, layout, function):
+#second effort at a loading window during research process
+def loading_window(self, name, layout, function):
 
-        def function_thread(window: sg.Window, the_function = function):
-            results = function()
-            window.write_event_value('-THREAD DONE-', '')
-            return results
+    def function_thread(window: sg.Window, the_function = function):
+        results = function()
+        window.write_event_value('-THREAD DONE-', '')
+        return results
 
-        def function_threading():
-            threading.Thread(target=function_thread, args=(window, function,), daemon=True).start()
-            print("function threaded")
+    def function_threading():
+        threading.Thread(target=function_thread, args=(window, function,), daemon=True).start()
+        print("function threaded")
 
-        window = sg.Window(name, layout,)
+    window = sg.Window(name, layout,)
+    while True:
+        event, values = window.read()
+        function_threading()
+        if event == '-THREAD DONE-':
+            print("thread complete.")
+            break
+    window.close()
+
+#third effort at a loading screen gui
+def loading_window_during_func(self, func):
+    sg.theme(self.gui_theme)
+    layout = [[sg.Text("Performing Function. Please wait...")]]
+    window = sg.Window(title="Loading Window", layout=layout, enable_close_attempted_event= True)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        window_results = executor.submit(window.read)
+        func_results = executor.submit(func)
+
+    if func_results:
+        window.close()
+
+# 4th effort at loading screen
+def loading_window_during_func(self, func):
+    sg.theme(self.gui_theme)
+    layout = [[sg.Text("Performing Function. Please wait...")]]
+    window = sg.Window(title="Loading Window", layout=layout, enable_close_attempted_event= True)
+
+    def window_looks_for_func_end():
         while True:
             event, values = window.read()
-            function_threading()
-            if event == '-THREAD DONE-':
-                print("thread complete.")
-                break
-        window.close()
+            if event in ('-THREAD DONE-', sg.WIN_CLOSED):
+                window.close()
+                return
+
+    def alert_window_when_function_complete(function):
+        func_results = function()
+        window.write_event_value('-THREAD DONE-', '')
+        return func_results
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        window_results = executor.submit(window_looks_for_func_end)
+        func_results = executor.submit(alert_window_when_function_complete, [func])

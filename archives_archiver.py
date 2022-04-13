@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.13
+__version__ = 1.20
 
 # Typing Aliases
 # pysimplegui_layout
@@ -181,10 +181,10 @@ class GuiHandler:
     def make_window(self, window_name: str, window_layout: list):
         sg.theme(self.gui_theme)
         # launch gui
-        dist_window = sg.Window(window_name, layout= window_layout, enable_close_attempted_event= True)
-        event, values = dist_window.read()
-        values["Button Event"] = event
-        dist_window.close()
+        window = sg.Window(window_name, layout= window_layout, enable_close_attempted_event= True)
+        event, values = window.read()
+        values["Button Event"] = event #TODO add window.bring_to_front()
+        window.close()
         return defaultdict(None, values)
 
     def directory_treedata(self, parent_dir, dir_name) -> sg.TreeData:
@@ -312,6 +312,25 @@ class GuiHandler:
             [sg.Button("Back"), sg.Button("Exit")]
         ]
         return error_gui_layout
+
+    def loading_screen(self, func, loading_window_name: str, loading_text: str):
+        sg.theme(self.gui_theme)
+        layout = [[sg.Text(loading_text)]]
+        window = sg.Window(loading_window_name, layout)
+
+        def close_window_after_function(some_func):
+            time.sleep(.001)
+            some_func()
+            window.write_event_value('-THREAD DONE-', '')
+
+        threading.Thread(target=close_window_after_function, args=(func,), daemon=True).start()
+        while True:
+            event, values = window.read()
+            if event in (sg.WIN_CLOSED, '-THREAD DONE-'):
+                window.close()
+                return
+
+
 
 
 class ArchivalFile:
@@ -984,14 +1003,14 @@ class Archivist:
                                                                      self.file_to_archive.assemble_destination_filename())
         return self.file_to_archive
 
-    def research_for_archival_file(self):
+    def research_for_archival_file(self, files= [], destinations= []):
         filename = self.file_to_archive.new_filename
         if not filename:
             filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
-        files = self.researcher.similar_filename_paths(original_filename= filename, duration= 6,
-                                                                   similarity_threshold= 72, max_paths= 7)
+        files += self.researcher.similar_filename_paths(original_filename=filename, duration=6, similarity_threshold=72,
+                                                        max_paths=7)
 
-        destinations = self.researcher.randomized_destination_examples(
+        destinations += self.researcher.randomized_destination_examples(
             dest_dir=self.file_to_archive.destination_dir,)
 
         return files, destinations
@@ -1018,10 +1037,17 @@ class Archivist:
 
         else:
             #if we do research
-            similar_files_paths, destination_examples = [], []
             if self.perform_research:
-                file_examples, destination_examples = self.research_for_archival_file()
-                similar_files_paths = [path['filepath'] for path in file_examples]
+
+                # The loading screen gui cannot return values. hence some jiggery-pokery to make the functions change
+                # existing objects en lieu of returning the research results
+                similar_files_paths, destination_examples = [], []
+                perform_research = lambda : self.research_for_archival_file(files=similar_files_paths,
+                                                                            destinations=destination_examples)
+
+                self.gui.loading_screen(func=perform_research, loading_window_name="Researching...",
+                                        loading_text= "Performing research; please wait...")
+                similar_files_paths = [path['filepath'] for path in similar_files_paths]
 
                 #create tree data structures from directory paths
                 destination_examples = [self.gui.directory_treedata('', path) for path in destination_examples]
@@ -1154,7 +1180,14 @@ class Tester:
 
     @staticmethod
     def test_loading_screen():
-        pass
+        def wait_eight():
+            print("waiting 8 seconds.")
+            time.sleep(8)
+            print("wait over")
+        gui = GuiHandler()
+
+
+        gui.loading_screen(wait_eight)
 
 
 
