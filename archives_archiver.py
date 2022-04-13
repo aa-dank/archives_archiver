@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.12
+__version__ = 1.13
 
 # Typing Aliases
 # pysimplegui_layout
@@ -585,17 +585,19 @@ class ArchivalFile:
         return self.destination_path
 
     def attribute_defaultdict(self):
-        date_stamp = self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S")
+        date_stamp = ''
+        if self.datetime_archived:
+            date_stamp = self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S")
         if (self.destination_path or self.current_path) and not self.size:
             if not self.destination_path:
                 self.size = str(os.path.getsize(self.current_path))
             else:
                 self.size = str(os.path.getsize(self.destination_path))
 
-        dict = {"time_archived": date_stamp, "project_number": self.project_number,
+        attribute_dict = {"time_archived": date_stamp, "project_number": self.project_number,
                 "destination_path": self.destination_path, "destination_directory": self.destination_dir,
                 "file_size": self.size, "notes": self.notes}
-        return defaultdict(None, dict)
+        return defaultdict(None, attribute_dict)
 
     def check_permissions(self):
         """
@@ -609,7 +611,7 @@ class ArchivalFile:
         try:
             os.rename(self.current_path, self.current_path)
         except OSError as e:
-            issues_found = "Access-error on file" + '! \n' + str(e) + "\n"
+            issues_found = "Access error on file using renaming test:" + '! \n' + str(e) + "\n"
 
         if not os.access(self.current_path, os.R_OK):
             issues_found += "No read access for the file.\n"
@@ -1049,17 +1051,14 @@ class Archivist:
                                         "the application ran into file access issues: \n"
 
             if archive_exception:
-                permissions_error_message += f"The shutil.copyfile() call produced this error: \n {archive_exception}"
+                permissions_error_message += f"The shutil.copyfile() call produced this error: \n {archive_exception}\n"
             if permission_issue:
-                permissions_error_message += f"Testing the permissions of the file yielded: \n {permission_issue}"
+                permissions_error_message += f"Testing the permissions of the file yielded: \n {permission_issue}\n"
 
             self.display_error(error_message=permissions_error_message)
-            return
+            return False
 
-
-
-
-
+        return True
 
     def add_archived_file_to_csv(self, csv_path):
         """
@@ -1085,7 +1084,11 @@ class Archivist:
         self.file_to_archive = ArchivalFile(current_path= os.path.join(self.files_to_archive_directory, current_file))
 
     def exit_app(self):
-        #Attempt to delete all the files in the self.opened_copies_directory
+        """
+        process for shutting down the app. Attempts to clear the temporary files directory.
+        :return:
+        """
+        # Attempt to delete all the files in the self.opened_copies_directory.
         open_copies_dir_path = os.path.join(os.getcwd(), self.opened_copies_directory)
         opened_file_copies = [os.path.join(open_copies_dir_path, f) for f in os.listdir(open_copies_dir_path) if
                               os.path.isfile(os.path.join(open_copies_dir_path, f))]
@@ -1187,9 +1190,10 @@ def main():
 
         destination_confirmed = ppdo_archivist.confirm_chosen_file_destination()
         if destination_confirmed:
-            ppdo_archivist.archive_file()
-            ppdo_archivist.add_archived_file_to_csv(csv_filepath)
-            print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
+            is_archived = ppdo_archivist.archive_file()
+            if is_archived:
+                ppdo_archivist.add_archived_file_to_csv(csv_filepath)
+                print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
 if __name__ == "__main__":
