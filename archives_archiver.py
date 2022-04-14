@@ -136,9 +136,13 @@ class ArchiverHelpers:
             return
 
     @staticmethod
-    def clean_path(path):
-        '''Process a path string such that it can be used regardless of the os and regardless of whether its length
-        surpasses the limit in windows file systems'''
+    def clean_path(path: str):
+        """
+        Process a path string such that it can be used regardless of the os and regardless of whether its length
+        surpasses the limit in windows file systems
+        :param path:
+        :return:
+        """
         path = path.replace('/', os.sep).replace('\\', os.sep)
         if os.sep == '\\' and '\\\\?\\' not in path:
             # fix for Windows 260 char limit
@@ -313,7 +317,15 @@ class GuiHandler:
         ]
         return error_gui_layout
 
-    def loading_screen(self, func, loading_window_name: str, loading_text: str):
+    def loading_screen(self, long_func, loading_window_name: str, loading_text: str):
+        """
+        This function opens a simply test window for the duration of the long-func function.
+        It cannot return a value; long_func would need to be written to avoid having to use its return value.
+        :param long_func: the function during which the loading screen will render.
+        :param loading_window_name: text along the top of the window
+        :param loading_text: Text that appears within the window
+        :return: None
+        """
         sg.theme(self.gui_theme)
         layout = [[sg.Text(loading_text)]]
         window = sg.Window(loading_window_name, layout)
@@ -323,14 +335,12 @@ class GuiHandler:
             some_func()
             window.write_event_value('-THREAD DONE-', '')
 
-        threading.Thread(target=close_window_after_function, args=(func,), daemon=True).start()
+        threading.Thread(target=close_window_after_function, args=(long_func,), daemon=True).start()
         while True:
             event, values = window.read()
             if event in (sg.WIN_CLOSED, '-THREAD DONE-'):
                 window.close()
                 return
-
-
 
 
 class ArchivalFile:
@@ -613,9 +623,13 @@ class ArchivalFile:
             else:
                 self.size = str(os.path.getsize(self.destination_path))
 
+        #if we don't have a file code, generate one from the destination
+        if self.destination_dir and not self.file_code:
+            self.file_code = ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)
+
         attribute_dict = {"time_archived": date_stamp, "project_number": self.project_number,
                 "destination_path": self.destination_path, "destination_directory": self.destination_dir,
-                "file_size": self.size, "notes": self.notes}
+                          "file_code": self.file_code, "file_size": self.size, "notes": self.notes}
         return defaultdict(None, attribute_dict)
 
     def check_permissions(self):
@@ -1036,16 +1050,16 @@ class Archivist:
             return False
 
         else:
-            #if we do research
+            #if user chose to do research...
+            similar_files_paths, destination_examples = [], []
             if self.perform_research:
 
                 # The loading screen gui cannot return values. hence some jiggery-pokery to make the functions change
                 # existing objects en lieu of returning the research results
-                similar_files_paths, destination_examples = [], []
                 perform_research = lambda : self.research_for_archival_file(files=similar_files_paths,
                                                                             destinations=destination_examples)
 
-                self.gui.loading_screen(func=perform_research, loading_window_name="Researching...",
+                self.gui.loading_screen(long_func=perform_research, loading_window_name="Researching...",
                                         loading_text= "Performing research; please wait...")
                 similar_files_paths = [path['filepath'] for path in similar_files_paths]
 
@@ -1094,6 +1108,12 @@ class Archivist:
         """
         data_dict = self.file_to_archive.attribute_defaultdict()
         data_dict["archiver_email"] = self.email
+
+        # make csv file if it doesn't yet exist
+        if not os.path.exists(csv_path):
+            df = pd.DataFrame(columns= list(data_dict.keys()))
+            df.to_csv(path=csv_path)
+
         archived_file_df = pd.DataFrame(data_dict, index=[0, ])
         archived_file_df.to_csv(csv_path, mode='a', index=False, header=False)
 
@@ -1103,7 +1123,8 @@ class Archivist:
         :return:
         """
         while not self.files_to_archive():
-            no_file_error_message = f"No files to archive. Add files to" + os.linesep + f"{self.files_to_archive_directory}"
+            no_file_error_message = f"No files to archive. Add files to" + os.linesep +\
+                                    f"{self.files_to_archive_directory}"
             self.display_error(no_file_error_message)
 
         current_file = self.files_to_archive()[0]

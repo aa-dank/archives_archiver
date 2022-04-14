@@ -62,7 +62,7 @@ def the_gui():
         elif event == '-THREAD-':
             print('Got a message back from the thread: ', values[event])
 
-    # if user exits the window, then close the window and exit the GUI func
+    # if user exits the window, then close the window and exit the GUI long_func
     window.close()
 
 
