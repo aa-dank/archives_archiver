@@ -345,7 +345,7 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
+    def     __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
                  notes: str = None, destination_dir: str = None):
         """
 
@@ -366,6 +366,7 @@ class ArchivalFile:
         self.notes = notes
         self.destination_path = destination_path
         self.datetime_archived = None
+        self.file_code = None
         if destination_dir:
             self.file_code = ArchiverHelpers.file_code_from_destination_dir(destination_dir)
 
@@ -1001,10 +1002,16 @@ class Archivist:
             self.perform_research = destination_gui_results["Research"]
 
             directory_choice = ''
+            file_code = ''
             if destination_gui_results["Directory Choice"]:
                 directory_choice = destination_gui_results["Directory Choice"][0]
 
+            # If there was a manually entered path, populate the file_code, destination_dir, and destination_path
+            # attribute for the file_to_archive attribute.
             manual_archived_path = destination_gui_results["Manual Path"]
+            if manual_archived_path:
+                directory_choice = ArchiverHelpers.split_path(manual_archived_path)[-1]
+                file_code = ArchiverHelpers.file_code_from_destination_dir(directory_choice)
             file_notes = destination_gui_results["Notes"]
             new_filename = destination_gui_results["Filename"]
             self.file_to_archive = ArchivalFile(current_path=files_in_archiving_dir[0],
@@ -1012,12 +1019,22 @@ class Archivist:
                                                 new_filename=new_filename,
                                                 destination_dir=directory_choice,
                                                 notes=file_notes)
+
             if manual_archived_path:
+                if file_code:
+                    self.file_to_archive.file_code = file_code
                 self.file_to_archive.destination_path = os.path.join(manual_archived_path,
                                                                      self.file_to_archive.assemble_destination_filename())
         return self.file_to_archive
 
     def research_for_archival_file(self, files= [], destinations= []):
+        """
+        This wrapper function packages the results of the researcher so that it can be called within the
+        GuiHandler.Loading_screen() which cannot return values
+        :param files:
+        :param destinations:
+        :return:
+        """
         filename = self.file_to_archive.new_filename
         if not filename:
             filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
@@ -1112,7 +1129,7 @@ class Archivist:
         # make csv file if it doesn't yet exist
         if not os.path.exists(csv_path):
             df = pd.DataFrame(columns= list(data_dict.keys()))
-            df.to_csv(path=csv_path)
+            df.to_csv(csv_path)
 
         archived_file_df = pd.DataFrame(data_dict, index=[0, ])
         archived_file_df.to_csv(csv_path, mode='a', index=False, header=False)
