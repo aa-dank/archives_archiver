@@ -10,12 +10,13 @@ import time
 import pandas as pd
 import PySimpleGUI as sg
 
+from typing import List, Dict
 from thefuzz import fuzz
 from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.20
+__version__ = 1.30
 
 # Typing Aliases
 # pysimplegui_layout
@@ -251,7 +252,7 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self, destination_path: str, similar_files: list[str] = [], dir_trees: list[sg.TreeData] = []):
+    def confirmation_layout(self, destination_path: str, similar_files: List[str] = [], dir_trees: Dict[str, sg.TreeData] = {}):
         """
 
         :param destination_path:
@@ -273,26 +274,28 @@ class GuiHandler:
         #create and append directory example structures into layout
         if dir_trees:
             confirmation_gui_layout.append([sg.Text("Examples of directories with the same filing codes: ")])
-            trees = []
-            for tree in dir_trees:
+            tab_group_layout = []
+            for tree_path, tree in dir_trees.items():
                 #only use max of three examples
-                if len(trees)  == 3:
+                if len(tab_group_layout) == 3:
                     break
 
-                trees.append(sg.Tree(data= tree,
-                                     headings=['Size (KB)', ],
-                                     auto_size_columns=True,
-                                     select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
-                                     num_rows=6,
-                                     col0_width=40,
-                                     row_height= 32,
-                                     show_expanded=False,
-                                     enable_events=False,
-                                     expand_x=True,
-                                     expand_y=True,
-                                    ))
+                tree_element = sg.Tree(data= tree,
+                                       headings=['Size (KB)', ],
+                                       auto_size_columns=True,
+                                       select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
+                                       num_rows=6,
+                                       col0_width=40,
+                                       row_height= 32,
+                                       show_expanded=False,
+                                       enable_events=False,
+                                       expand_x=True,
+                                       expand_y=True,
+                                       )
 
-            confirmation_gui_layout.append([trees])
+                tab_group_layout.append(sg.Tab(tree_path, layout=[[tree_element]]))
+
+            confirmation_gui_layout.append([sg.TabGroup([tab_group_layout])])
 
         confirmation_gui_layout += [
             [sg.Button("Ok"), sg.Button("Back"), sg.Button("Exit")]
@@ -1013,7 +1016,7 @@ class Archivist:
                 directory_choice = ArchiverHelpers.split_path(manual_archived_path)[-1]
                 file_code = ArchiverHelpers.file_code_from_destination_dir(directory_choice)
             file_notes = destination_gui_results["Notes"]
-            new_filename = destination_gui_results["Filename"]
+            new_filename = destination_gui_results["Filename"].strip()
             self.file_to_archive = ArchivalFile(current_path=files_in_archiving_dir[0],
                                                 project=project_num,
                                                 new_filename=new_filename,
@@ -1075,13 +1078,11 @@ class Archivist:
                 # existing objects en lieu of returning the research results
                 perform_research = lambda : self.research_for_archival_file(files=similar_files_paths,
                                                                             destinations=destination_examples)
-
                 self.gui.loading_screen(long_func=perform_research, loading_window_name="Researching...",
                                         loading_text= "Performing research; please wait...")
                 similar_files_paths = [path['filepath'] for path in similar_files_paths]
-
                 #create tree data structures from directory paths
-                destination_examples = [self.gui.directory_treedata('', path) for path in destination_examples]
+                destination_examples = {path: self.gui.directory_treedata('', path) for path in destination_examples}
 
             confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
                                                                    similar_files= similar_files_paths,
@@ -1226,8 +1227,15 @@ class Tester:
 
 
         gui.loading_screen(wait_eight)
+        return
 
-
+    @staticmethod
+    def test_layout(some_layout):
+        window = sg.Window("test", some_layout)
+        event, values = window.read()
+        time.sleep(2)
+        window.close()
+        return event, values
 
 
 def main():
