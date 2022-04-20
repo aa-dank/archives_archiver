@@ -10,6 +10,7 @@ import time
 import pandas as pd
 import PySimpleGUI as sg
 
+from dateutil import parser
 from typing import List, Dict
 from thefuzz import fuzz
 from collections import defaultdict
@@ -240,6 +241,7 @@ class GuiHandler:
             [sg.Text("Default Project:"), sg.Text(default_project_num)],
             [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
+            [sg.Text("Document date:"), sg.Input(key="Document Date")],
             [sg.Text("Choose Directory to for file:"), sg.Listbox(values=dir_choices, key="Directory Choice",
                                                                   size=(listbox_width, listbox_height))],
             [sg.Text("Alternatively, Enter the full path to directory where the file has been archived:")],
@@ -349,7 +351,7 @@ class GuiHandler:
 class ArchivalFile:
 
     def     __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
-                 notes: str = None, destination_dir: str = None):
+                 notes: str = None, destination_dir: str = None, document_date: str = None):
         """
 
         :param current_path: path to  file
@@ -372,6 +374,9 @@ class ArchivalFile:
         self.file_code = None
         if destination_dir:
             self.file_code = ArchiverHelpers.file_code_from_destination_dir(destination_dir)
+        self.document_date = None
+        if document_date:
+            self.document_date = parser.parse(document_date)
 
     def assemble_destination_filename(self):
         """
@@ -619,8 +624,11 @@ class ArchivalFile:
 
     def attribute_defaultdict(self):
         date_stamp = ''
+        doc_date = ''
         if self.datetime_archived:
             date_stamp = self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S")
+        if self.document_date:
+            doc_date = self.document_date.strftime("%m/%d/%Y, %H:%M:%S")
         if (self.destination_path or self.current_path) and not self.size:
             if not self.destination_path:
                 self.size = str(os.path.getsize(self.current_path))
@@ -632,7 +640,7 @@ class ArchivalFile:
             self.file_code = ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)
 
         attribute_dict = {"time_archived": date_stamp, "project_number": self.project_number,
-                "destination_path": self.destination_path, "destination_directory": self.destination_dir,
+                "destination_path": self.destination_path, "document_date": doc_date, "destination_directory": self.destination_dir,
                           "file_code": self.file_code, "file_size": self.size, "notes": self.notes}
         return defaultdict(None, attribute_dict)
 
@@ -901,6 +909,7 @@ class Archivist:
         self.default_project_number = None
         self.perform_research = True
         self.researcher = Researcher()
+        self.datetime_format = "%m/%d/%Y, %H:%M:%S"
 
     def display_error(self, error_message) -> bool:
         """
@@ -1012,6 +1021,7 @@ class Archivist:
             # If there was a manually entered path, populate the file_code, destination_dir, and destination_path
             # attribute for the file_to_archive attribute.
             manual_archived_path = destination_gui_results["Manual Path"]
+            doc_date = destination_gui_results["Document Date"]
             if manual_archived_path:
                 directory_choice = ArchiverHelpers.split_path(manual_archived_path)[-1]
                 file_code = ArchiverHelpers.file_code_from_destination_dir(directory_choice)
@@ -1021,6 +1031,7 @@ class Archivist:
                                                 project=project_num,
                                                 new_filename=new_filename,
                                                 destination_dir=directory_choice,
+                                                document_date= doc_date,
                                                 notes=file_notes)
 
             if manual_archived_path:
