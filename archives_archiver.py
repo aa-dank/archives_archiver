@@ -4,6 +4,7 @@ import logging
 import random
 import subprocess
 import shutil
+import sqlite3
 import sys
 import threading
 import time
@@ -350,7 +351,7 @@ class GuiHandler:
 
 class ArchivalFile:
 
-    def     __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
+    def __init__(self, current_path: str, project: str = None, destination_path: str = None, new_filename: str = None,
                  notes: str = None, destination_dir: str = None, document_date: str = None):
         """
 
@@ -639,9 +640,10 @@ class ArchivalFile:
         if self.destination_dir and not self.file_code:
             self.file_code = ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)
 
-        attribute_dict = {"time_archived": date_stamp, "project_number": self.project_number,
-                "destination_path": self.destination_path, "document_date": doc_date, "destination_directory": self.destination_dir,
-                          "file_code": self.file_code, "file_size": self.size, "notes": self.notes}
+        attribute_dict = {"date_archived": date_stamp, "project_number": self.project_number,
+                          "destination_path": self.destination_path, "document_date": doc_date,
+                          "destination_directory": self.destination_dir, "file_code": self.file_code,
+                          "file_size": self.size, "notes": self.notes}
         return defaultdict(None, attribute_dict)
 
     def check_permissions(self):
@@ -699,6 +701,65 @@ class ArchivalFile:
             return True, ''
         except Exception as e:
             return False, e
+
+
+class SqliteDatabase:
+
+    def __int__(self, location, filename):
+        self.filename = filename
+        self.path = os.path.join(location, filename)
+        self.archivist_tablename = 'archivists'
+        self.document_tablename = 'archived_files'
+        self.connection = sqlite3.connect(self.path)
+        self.archivists_table_cols = {'email': 'TEXT NOT NULL'}
+        self.archived_doc_table_cols = {'destination_path': 'TEXT', 'project_number': 'TEXT',
+                                        'document_date': 'TEXT', 'destination_directory': 'TEXT',
+                                        'file_code': 'TEXT', 'file_size': 'REAL', 'date_archived': 'TEXT',
+                                        'archivist_id': 'INTEGER', 'audit_date': 'TEXT', 'auditor_id': 'INTEGER',
+                                        'notes' : 'TEXT'
+                                        }
+
+        if not os.path.exists(self.path):
+            with sqlite3.connect(self.path) as conn:
+                c = conn.cursor()
+                archivists_setup_sql = f"""CREATE TABLE IF NOT EXISTS {self.archivist_tablename} (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, """
+                for col, col_type in self.archivists_table_cols.items():
+                    col = col.strip()
+                    col_type = col_type.strip()
+                    archivists_setup_sql += f"{col} {col_type}," + os.linesep
+                # replace comma and newline with back-parenthese and semi-colon to end sql string
+                archivists_setup_sql = archivists_setup_sql[:-3] + r"); "
+                c.execute(archivists_setup_sql)
+
+                archival_docs_setup_sql = f"""CREATE TABLE IF NOT EXISTS {self.} (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, """
+                for col, col_type in self.archived_doc_table_cols.items():
+                    col = col.strip()
+                    col_type = col_type.strip()
+                    archival_docs_setup_sql += f"{col} {col_type}," + os.linesep
+                    if col.lower().endswith('id'):
+                        archival_docs_setup_sql += f"""FOREIGN KEY({col}) REFERENCES families(id)"""
+                archival_docs_setup_sql = archival_docs_setup_sql[:-3] + r"); "
+                c.execute(archivists_setup_sql)
+
+    def record_document(self, arch_document: ArchivalFile):
+        column_names = list(self.archived_doc_table_cols.keys())
+        questionmark_placeholders = ",".join(['?' for _ in column_names])
+        sql_cols = ",".join(column_names)
+        insert_sql = f""" INSERT INTO {self.document_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        with sqlite3.connect(self.path) as conn:
+            c = conn.cursor()
+            attribute_val_dict = arch_document.attribute_defaultdict()
+            archived_doc_vals = tuple([attribute_val_dict[k] for k in column_names])
+            c.execute(insert_sql, archived_doc_vals)
+
+    def add_archivist(self, archivist_dict):
+        column_names = list(self.archivists_table_cols.keys())
+        questionmark_placeholders = ",".join(['?' for _ in column_names])
+        sql_cols = ",".join(column_names)
+        insert_sql = f""" INSERT INTO {self.archivist_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        with sqlite3.connect(self.path) as conn:
+            vals = tuple([archivist_dict[k] for k in column_names])
+
 
 
 class Researcher:
@@ -869,7 +930,7 @@ class Archivist:
     def __init__(self, files_to_archive_directory: str, app_files_directory: str, records_drive_path: str,
                  gui_file_icon: str, gui_dir_icon: str, file_to_archive: ArchivalFile = None):
 
-        ##Build necessary directory structiure###
+        ##Build necessary directory structure###
         self.files_to_archive_directory = files_to_archive_directory
         if not os.path.exists(files_to_archive_directory):
             try:
