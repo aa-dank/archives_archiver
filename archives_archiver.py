@@ -13,6 +13,7 @@ import pandas as pd
 import PySimpleGUI as sg
 
 from dateutil import parser
+from contextlib import closing
 from typing import List, Dict
 from thefuzz import fuzz
 from collections import defaultdict
@@ -676,7 +677,6 @@ class ArchivalFile:
         return issues_found
 
 
-
     def archive(self, destination=None):
 
         # if the file has already been archived return the destination path
@@ -712,7 +712,8 @@ class ArchivalFile:
 
 class SqliteDatabase:
 
-    def __init__(self, location, filename):
+    def __init__(self, location, filename, datetime_format):
+        self.datetime_format = datetime_format
         self.filename = filename
         self.path = os.path.join(location, filename)
         self.archivist_tablename = 'archivists'
@@ -722,12 +723,11 @@ class SqliteDatabase:
         self.archived_doc_table_cols = {'destination_path': 'TEXT', 'project_number': 'TEXT',
                                         'document_date': 'TEXT', 'destination_directory': 'TEXT',
                                         'file_code': 'TEXT', 'file_size': 'REAL', 'date_archived': 'TEXT',
-                                        'archivist_id': 'INTEGER NOT NULL', 'audit_date': 'TEXT', 'auditor_id': 'INTEGER',
-                                        'notes' : 'TEXT'
+                                        'archivist_id': 'INTEGER NOT NULL', 'notes' : 'TEXT'
                                         }
 
         # Creates tables if they do not exist yet
-        with sqlite3.connect(self.path) as conn:
+        with closing(sqlite3.connect(self.path)) as conn:
             c = conn.cursor()
             archivists_setup_sql = f"""CREATE TABLE IF NOT EXISTS {self.archivist_tablename} (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE, """
             for col, col_type in self.archivists_table_cols.items():
@@ -761,10 +761,29 @@ class SqliteDatabase:
             vals = tuple([archivist_dict[k] for k in column_names])
             c.execute(insert_sql, vals)
 
-    def get_user_id(self, user_email):
-        pass
+    def user_id_from_email(self, user_email):
+
+        with closing(sqlite3.connect(self.path)) as conn:
+            c = conn.cursor()
+            user_id = None
+            while not user_id:
+                get_user_id_sql = f"""SELECT id FROM {self.archivist_tablename} WHERE email = ?"""
+                c.execute(get_user_id_sql, (user_email,))
+                sql_results = c.fetchone()
+                if not sql_results:
+                    self.add_user({'email': user_email})
+                    continue
+                user_id = sql_results[0]
+        return user_id
+
 
     def record_document(self, arch_document: ArchivalFile, archivist_email):
+        """
+        :param arch_document:
+        :param archivist_email:
+        :return:
+        """
+
         column_names = list(self.archived_doc_table_cols.keys())
         questionmark_placeholders = ",".join(['?' for _ in column_names])
         sql_cols = ",".join(column_names)
@@ -772,23 +791,15 @@ class SqliteDatabase:
         with sqlite3.connect(self.path) as conn:
             c = conn.cursor()
             attribute_val_dict = arch_document.attribute_defaultdict()
-            #archived_doc_vals = tuple([attribute_val_dict[k] for k in column_names])
+            attribute_val_dict['archivist_id'] = self.user_id_from_email(archivist_email)
             archived_doc_vals = []
             for col in column_names:
 
-                #if the value is an archivist email, we append their corresponding index from the sqlite table
-                if attribute_val_dict[col] and ArchiverHelpers.is_valid_email(attribute_val_dict[col]):
-                    while True:
-                        get_archivist_id_sql = f"""SELECT id FROM {self.archivist_tablename} WHERE email = ?"""
-                        c.execute(get_archivist_id_sql, attribute_val_dict[col])
-                        archivist_id = c.fetchone() #TODO what do we get here
-                        if not archivist_id:
-                            self.add_user({'email', attribute_val_dict[col]})
-                            continue
-                        archived_doc_vals.append(archivist_id)
+                if col == 'date_archived':
+                    archived_doc_vals.append(datetime.now().strftime(self.datetime_format))
+                    continue
 
-                else:
-                    archived_doc_vals.append(attribute_val_dict[col])
+                archived_doc_vals.append(attribute_val_dict[col])
             c.execute(insert_sql, archived_doc_vals)
 
 
@@ -1343,13 +1354,14 @@ class Tester:
     @staticmethod
     def test_sqlitedb():
         location = r"\\128.114.170.27\Cannon_Scans\test_db"
-        DB = SqliteDatabase(location, "test.db")
+        datetime_format = "%m/%d/%Y, %H:%M:%S"
+        DB = SqliteDatabase(location, "test.db", datetime_format)
         test_file = ArchivalFile(
             current_path=r"C:\Users\adankert\Google Drive\GitHub\archives_archiver\files_to_archive\20220317103244.pdf",
-            project='2512',destination_path="R:\24xx   Physical Plant Buildings\2512\F8 - Contract",
-            new_filename= "RFI 061",notes= "THese are test notes",destination_dir="F8 - Contract",
+            project='2512',destination_path=r"R:\24xx   Physical Plant Buildings\2512\F8 - Contract",
+            new_filename= "RFI 061",notes= "These are test notes",destination_dir="F8 - Contract",
             document_date="December 5, 2012")
-        DB.record_document(test_file)
+        DB.record_document(test_file, 'testemail2@ucsc.edu')
 
 
 def main():
