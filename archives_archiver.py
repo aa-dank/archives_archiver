@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.30
+__version__ = 1.4
 
 # Typing Aliases
 # pysimplegui_layout
@@ -712,10 +712,9 @@ class ArchivalFile:
 
 class SqliteDatabase:
 
-    def __init__(self, location, filename, datetime_format):
-        self.datetime_format = datetime_format
-        self.filename = filename
-        self.path = os.path.join(location, filename)
+    def __init__(self, path):
+        self.datetime_format = "%m/%d/%Y, %H:%M:%S"
+        self.path = path
         self.archivist_tablename = 'archivists'
         self.document_tablename = 'archived_files'
         self.connection = sqlite3.connect(self.path)
@@ -970,7 +969,8 @@ class Archivist:
     """
 
     def __init__(self, files_to_archive_directory: str, app_files_directory: str, records_drive_path: str,
-                 gui_file_icon: str, gui_dir_icon: str, file_to_archive: ArchivalFile = None):
+                 gui_file_icon: str, gui_dir_icon: str, database_location: str,
+                 file_to_archive: ArchivalFile = None):
 
         ##Build necessary directory structure###
         self.files_to_archive_directory = files_to_archive_directory
@@ -1012,6 +1012,7 @@ class Archivist:
         self.default_project_number = None
         self.perform_research = True
         self.researcher = Researcher()
+        self.database = SqliteDatabase(database_location)
         self.datetime_format = "%m/%d/%Y, %H:%M:%S"
 
     def display_error(self, error_message) -> bool:
@@ -1234,7 +1235,8 @@ class Archivist:
 
     def add_archived_file_to_csv(self, csv_path):
         """
-
+        Method for saving the metadata from a file to archive in a csv file.
+        Deprecated en lieu of using sql storage solution.
         :param csv_path:
         :return:
         """
@@ -1248,6 +1250,13 @@ class Archivist:
 
         archived_file_df = pd.DataFrame(data_dict, index=[0, ])
         archived_file_df.to_csv(csv_path, mode='a', index=False, header=False)
+
+    def add_archived_file_to_database(self):
+        """
+        Stores archival metadata in the database
+        :return:
+        """
+        self.database.record_document(arch_document= self.file_to_archive, archivist_email= self.email)
 
     def retrieve_file_to_archive(self):
         """
@@ -1365,18 +1374,18 @@ class Tester:
 
 
 def main():
-    csv_filename = "archived_files_archive.csv"
     app_files_dir = 'app_files'
+    database_path = r"\\128.114.170.27\Archive_Data\archives_archiver.db"
     gui_file_icon_filename = "file_3d_32x32.png"
     gui_dir_icon_filename = "folder_3d_32x32.png"
-    csv_filepath = os.path.join(os.getcwd(), csv_filename)
 
     dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
     ppdo_archivist = Archivist(files_to_archive_directory=dir_of_files_to_archive,
                                app_files_directory=os.path.join(os.getcwd(), app_files_dir),
                                records_drive_path=RECORDS_SERVER_LOCATION,
                                gui_file_icon=gui_file_icon_filename,
-                               gui_dir_icon=gui_dir_icon_filename)
+                               gui_dir_icon=gui_dir_icon_filename,
+                               database_location=database_path)
 
     ppdo_archivist.retrieve_email()
     while True:
@@ -1397,7 +1406,7 @@ def main():
         if destination_confirmed:
             is_archived = ppdo_archivist.archive_file()
             if is_archived:
-                ppdo_archivist.add_archived_file_to_csv(csv_filepath)
+                ppdo_archivist.add_archived_file_to_database()
                 print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
 
 
@@ -1406,5 +1415,5 @@ if __name__ == "__main__":
     # Tester.test_assemble_destination_path()
     # Tester.test_researcher()
     # Tester.test_loading_screen()
-    Tester.test_sqlitedb()
-    #main()
+    #Tester.test_sqlitedb()
+    main()
