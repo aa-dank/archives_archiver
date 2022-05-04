@@ -327,6 +327,7 @@ class GuiHandler:
     def info_message_layout(self, info_message: str, error: bool = False):
         """
 
+        :param info_message: Message for window
         :param error: whether the info message is error
         :return:
         """
