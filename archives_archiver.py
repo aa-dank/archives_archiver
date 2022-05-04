@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.41
+__version__ = 1.42
 
 # Typing Aliases
 # pysimplegui_layout
@@ -53,6 +53,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'F1.5 - Office of the President Correspondences', 'F1.6 - General Counsel Correspondences',
                      'F1.7 - Pre-Qualification', 'F1.8 - Other', 'F10 - Escrow Agreement',
                      'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
+                     'F3 - Structural, Title 24, Mech Calculations', 'F4 - Plan Deposits, Planholders, Ads for Bid',
                      'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
                      'F5 - Drawings and Spec', 'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract',
                      'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence',
@@ -64,12 +65,12 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G10 - Testing and Inspection Reports.Other',
                      'G11 - Proposal Requests. Bulletins. Contractors Response', 'G12 - Request for Information RFI',
                      'G13 - Letter of Instruction LOI', 'G14 - User Request Change in Scope', 'G15 - Change Order',
-                     'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist', 'G19 - NOC',
-                     'G2 - Certificate of Payment', 'G20 - Warranty Deficiency', 'G21 - Construction Photos',
-                     'G22 - Claims. Public Records Act', 'G22.1 - Claims Confidential', 'G23 - Commissioning',
-                     'G24 - Building Permits', "G3 - Contractor's Schedule and Updates", 'G4 - Progress Meeting Notes',
-                     'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits', 'G6 - UCSC Memoranda',
-                     'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
+                     'G16 - Field Orders', 'G17 - Warranties and Guarantees', 'G18 - Punchlist',
+                     'G19 - Notice of Completion', 'G2 - Certificate of Payment', 'G20 - Warranty Deficiency',
+                     'G21 - Construction Photos', 'G22 - Claims. Public Records Act', 'G22.1 - Claims Confidential',
+                     'G23 - Commissioning', 'G24 - Building Permits', "G3 - Contractor's Schedule and Updates",
+                     'G4 - Progress Meeting Notes', 'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits',
+                     'G6 - UCSC Memoranda', 'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
                      'G8 - Testing and Inspection Reports. Geotechnical Engineer']
 
 
