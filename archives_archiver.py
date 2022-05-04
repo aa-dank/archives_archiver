@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.4
+__version__ = 1.41
 
 # Typing Aliases
 # pysimplegui_layout
@@ -230,8 +230,9 @@ class GuiHandler:
         return tree_data
 
 
-    def welcome_layout(self):
+    def welcome_layout(self, version_number = __version__):
         welcome_gui_layout = [
+            [sg.Text(f"Archives_Archiver Version: {version_number}")],
             [sg.Text("Email address:"), sg.Input(key="Archivist Email")],
             [sg.Button("Ok"), sg.Button("Exit")]
         ]
@@ -323,13 +324,19 @@ class GuiHandler:
         ]
         return failed_gui_layout
 
-    def error_message_layout(self, error_message: str):
-        error_gui_layout = [
-            [sg.Text("Oops, an error occured:")],
-            [sg.Text(error_message)],
+    def info_message_layout(self, info_message: str, error: bool = False):
+        """
+
+        :param error: whether the info message is error
+        :return:
+        """
+        info_gui_layout = [
+            [sg.Text(info_message)],
             [sg.Button("Back"), sg.Button("Exit")]
         ]
-        return error_gui_layout
+        if error:
+            info_gui_layout = [[sg.Text("Oops, an error occured:")]] + info_gui_layout
+        return info_gui_layout
 
     def loading_screen(self, long_func, loading_window_name: str, loading_text: str):
         """
@@ -1015,17 +1022,17 @@ class Archivist:
         self.database = SqliteDatabase(database_location)
         self.datetime_format = "%m/%d/%Y, %H:%M:%S"
 
-    def display_error(self, error_message) -> bool:
+    def info_window(self, window_name = "ERROR", info_message = '', is_error = True) -> bool:
         """
 
-        :param error_message: string message to display
+        :param info_message: string message to display
         :return: bool whether user hit 'ok' button or not
         """
-        error_layout = self.gui.error_message_layout(error_message=error_message)
-        error_window_results = self.gui.make_window(window_name="ERROR", window_layout=error_layout)
-        if error_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
+        info_layout = self.gui.info_message_layout(info_message=info_message, error=is_error)
+        info_window_results = self.gui.make_window(window_name=window_name, window_layout=info_layout)
+        if info_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
             self.exit_app()
-        return error_window_results["Button Event"].lower() == "ok"
+        return info_window_results["Button Event"].lower() == "ok"
 
     def retrieve_email(self):
 
@@ -1178,7 +1185,7 @@ class Archivist:
         try:
             file_destination = self.file_to_archive.assemble_destination_path()
         except Exception as error:
-            except_layout = self.gui.error_message_layout(error_message=str(error))
+            except_layout = self.gui.info_message_layout(error_message=str(error), error=True)
             gui_results = self.gui.make_window(window_name="Invalid Destination Choices", window_layout=except_layout)
             if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
@@ -1212,8 +1219,8 @@ class Archivist:
 
         #if there is a path collision throw an error
         if self.file_to_archive.destination_path and os.path.exists(self.file_to_archive.destination_path):
-            self.display_error(
-                error_message=f"A file exists in that location with the same path: {self.file_to_archive.destination_path}")
+            self.info_window(
+                info_message=f"A file exists in that location with the same path: {self.file_to_archive.destination_path}")
             return
 
         #try to archive the file (kinda fraught) and display any isssues that might have come up.
@@ -1228,7 +1235,7 @@ class Archivist:
             if permission_issue:
                 permissions_error_message += f"Testing the permissions of the file yielded: \n {permission_issue}\n"
 
-            self.display_error(error_message=permissions_error_message)
+            self.info_window(info_message=permissions_error_message)
             return False
 
         return True
@@ -1264,9 +1271,10 @@ class Archivist:
         :return:
         """
         while not self.files_to_archive():
-            no_file_error_message = f"No files to archive. Add files to" + os.linesep +\
+            no_file_error_message = f"No files to archive. To archive additional files, add them to" + os.linesep +\
                                     f"{self.files_to_archive_directory}"
-            self.display_error(no_file_error_message)
+
+            self.info_window(window_name="Directory Empty", info_message=no_file_error_message, is_error=False)
 
         current_file = self.files_to_archive()[0]
         self.file_to_archive = ArchivalFile(current_path= os.path.join(self.files_to_archive_directory, current_file))
@@ -1394,12 +1402,12 @@ def main():
 
         # if there is no default project number and no project number was entered, display error message and restart loop
         if not ppdo_archivist.file_to_archive.project_number:
-            ppdo_archivist.display_error("No project number selected.")
+            ppdo_archivist.info_window("No project number selected.")
             continue
 
         #if no destination directory was chosen display error message
         if not ppdo_archivist.file_to_archive.destination_dir:
-            ppdo_archivist.display_error("No destination directory was selected.")
+            ppdo_archivist.info_window("No destination directory was selected.")
             continue
 
         destination_confirmed = ppdo_archivist.confirm_chosen_file_destination()
