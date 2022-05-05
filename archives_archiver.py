@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.42
+__version__ = 1.43
 
 # Typing Aliases
 # pysimplegui_layout
@@ -71,7 +71,8 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G23 - Commissioning', 'G24 - Building Permits', "G3 - Contractor's Schedule and Updates",
                      'G4 - Progress Meeting Notes', 'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits',
                      'G6 - UCSC Memoranda', 'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
-                     'G8 - Testing and Inspection Reports. Geotechnical Engineer']
+                     'G8 - Testing and Inspection Reports. Geotechnical Engineer',
+                     'G9 - Testing and Inspection Reports. Testing Labratory']
 
 
 class ArchiverHelpers:
