@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.43
+__version__ = 1.44
 
 # Typing Aliases
 # pysimplegui_layout
@@ -624,9 +624,12 @@ class ArchivalFile:
                 dirs_matching_proj_num = [dir_name for dir_name in proj_num_dir_dirs if proj_num_in_dir_name(dir_name)]
 
                 # if more than one directory starts with the same project number...
-                if not len(dirs_matching_proj_num) == 1:
+                if len(dirs_matching_proj_num) not in (0,1):
                     raise Exception(
                         f"{len(dirs_matching_proj_num)} matching directories in {new_path} for project number {self.project_number}; expected 0 or 1.")
+
+                if len(dirs_matching_proj_num) == 0:
+                    new_path = os.path.join(new_path, self.project_number)
 
                 if len(dirs_matching_proj_num) == 1:
                     new_path = os.path.join(new_path, dirs_matching_proj_num[0])
@@ -1188,7 +1191,7 @@ class Archivist:
         try:
             file_destination = self.file_to_archive.assemble_destination_path()
         except Exception as error:
-            except_layout = self.gui.info_message_layout(error_message=str(error), error=True)
+            except_layout = self.gui.info_message_layout(info_message=str(error), error=True)
             gui_results = self.gui.make_window(window_name="Invalid Destination Choices", window_layout=except_layout)
             if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
