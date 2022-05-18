@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.44
+__version__ = 1.45
 
 # Typing Aliases
 # pysimplegui_layout
@@ -72,7 +72,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G4 - Progress Meeting Notes', 'G5 - UCSC Inspectors Daily Reports', 'G5.1 - Hot Work Permits',
                      'G6 - UCSC Memoranda', 'G6.1 - Architects Field Reports', 'G7 - Contractors Daily Reports',
                      'G8 - Testing and Inspection Reports. Geotechnical Engineer',
-                     'G9 - Testing and Inspection Reports. Testing Labratory']
+                     'G9 - Testing and Inspection Reports. Testing Laboratory']
 
 
 class ArchiverHelpers:
@@ -266,7 +266,8 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self, destination_path: str, similar_files: List[str] = [], dir_trees: Dict[str, sg.TreeData] = {}):
+    def confirmation_layout(self, destination_path: str, destination_tree: sg.TreeData = None,
+                            similar_files: List[str]=[], dir_trees: Dict[str, sg.TreeData] = {}):
         """
 
         :param destination_path:
@@ -274,10 +275,36 @@ class GuiHandler:
         :param dir_trees:
         :return:
         """
-        treedata = sg.TreeData()
-
         confirmation_gui_layout = [
-            [sg.Text("Confirm this is correct location for this file:"), sg.Text(destination_path)]]
+            [sg.Text("Confirm this is correct location for this file:"), sg.Input(default_text=destination_path,
+                                                                                  size=(len(destination_path),),
+                                                                                  use_readonly_for_disable=True,
+                                                                                  disabled=True,
+                                                                                  background_color='#F7F3EC',
+                                                                                  text_color="black",
+                                                                                  key='Inert Destination Path')]]
+
+        if destination_tree:
+            destination_tree_element = sg.Tree(data=destination_tree,
+                                   headings=['Size (KB)', ],
+                                   auto_size_columns=True,
+                                   select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
+                                   num_rows=6,
+                                   col0_width=40,
+                                   row_height=32,
+                                   show_expanded=False,
+                                   enable_events=False,
+                                   expand_x=True,
+                                   expand_y=True,
+                                   )
+            confirmation_gui_layout.append([sg.Text("Destination Directory Contents: "), destination_tree_element])
+
+
+        if similar_files or dir_trees:
+            confirmation_gui_layout.append([sg.HorizontalSeparator(pad=6)])
+            confirmation_gui_layout.append([sg.Text("Research Results", size=(100, 2), justification='center',
+                                                    font=('bold'))])
+
 
         #if there is a list of similarly named files
         if similar_files:
@@ -1028,9 +1055,11 @@ class Archivist:
         self.database = SqliteDatabase(database_location)
         self.datetime_format = "%m/%d/%Y, %H:%M:%S"
 
-    def info_window(self, window_name = "ERROR", info_message = '', is_error = True) -> bool:
+    def info_window(self, window_name="ERROR", info_message='', is_error=True) -> bool:
         """
 
+        :param is_error: Should it use special configuration for displaying errors.
+        :param window_name:
         :param info_message: string message to display
         :return: bool whether user hit 'ok' button or not
         """
@@ -1198,6 +1227,14 @@ class Archivist:
             return False
 
         else:
+            # If the destination directory exists, we'll display its contents as a tree element. First need to extract
+            # the path to the destination directory and see if it already exists.
+            destination_tree = None
+            destination_list = ArchiverHelpers.split_path(self.file_to_archive.assemble_destination_path())
+            path_to_destination_dir = os.path.join(*destination_list[:-1])
+            if os.path.exists(path_to_destination_dir):
+                destination_tree = self.gui.directory_treedata('', path_to_destination_dir)
+
             #if user chose to do research...
             similar_files_paths, destination_examples = [], []
             if self.perform_research:
@@ -1209,12 +1246,13 @@ class Archivist:
                 self.gui.loading_screen(long_func=perform_research, loading_window_name="Researching...",
                                         loading_text= "Performing research; please wait...")
                 similar_files_paths = [path['filepath'] for path in similar_files_paths]
-                #create tree data structures from directory paths
+                # create tree data structures from directory paths
                 destination_examples = {path: self.gui.directory_treedata('', path) for path in destination_examples}
 
-            confirmation_gui_layout = self.gui.confirmation_layout(destination_path= file_destination,
-                                                                   similar_files= similar_files_paths,
-                                                                   dir_trees= destination_examples)
+            confirmation_gui_layout = self.gui.confirmation_layout(destination_path=file_destination,
+                                                                   destination_tree=destination_tree,
+                                                                   similar_files=similar_files_paths,
+                                                                   dir_trees=destination_examples)
             gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
             if gui_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
