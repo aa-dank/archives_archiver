@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.45
+__version__ = 1.46
 
 # Typing Aliases
 # pysimplegui_layout
@@ -165,6 +165,13 @@ class ArchiverHelpers:
         email_regex = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
         return re.fullmatch(email_regex, potential_email)
 
+    @staticmethod
+    def cleanse_filename(pruposed_filename: str):
+        """removes illegal filename chars"""
+        clean_filename = pruposed_filename.strip()
+        clean_filename = clean_filename.replace('\n','')
+        clean_filename = "".join(i for i in clean_filename if i not in "\/:*?<>|")
+        return clean_filename
 
 
 
@@ -200,7 +207,8 @@ class GuiHandler:
         # launch gui
         window = sg.Window(window_name, layout= window_layout, enable_close_attempted_event= True)
         event, values = window.read()
-        values["Button Event"] = event #TODO add window.bring_to_front()
+        window.bring_to_front()
+        values["Button Event"] = event
         window.close()
         return defaultdict(None, values)
 
@@ -241,7 +249,7 @@ class GuiHandler:
         return welcome_gui_layout
 
     def destination_choice_layout(self, dir_choices: list[str], current_filename: str, default_project_num: str = None,
-                                  research_default: bool = True):
+                                  research_default: bool = False):
         dir_choices.sort()
         # TODO try auto_size_text and expand_y
         listbox_width = max([len(dir_name) for dir_name in dir_choices])
@@ -266,7 +274,7 @@ class GuiHandler:
         destination_gui_layout.append([sg.Button("Ok"), sg.Button("Exit")])
         return destination_gui_layout
 
-    def confirmation_layout(self, destination_path: str, destination_tree: sg.TreeData = None,
+    def confirmation_layout(self, destination_path: str, destination_tree_data: sg.TreeData = None,
                             similar_files: List[str]=[], dir_trees: Dict[str, sg.TreeData] = {}):
         """
 
@@ -284,25 +292,25 @@ class GuiHandler:
                                                                                   text_color="black",
                                                                                   key='Inert Destination Path')]]
 
-        if destination_tree:
-            destination_tree_element = sg.Tree(data=destination_tree,
-                                   headings=['Size (KB)', ],
-                                   auto_size_columns=True,
-                                   select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
-                                   num_rows=6,
-                                   col0_width=40,
-                                   row_height=32,
-                                   show_expanded=False,
-                                   enable_events=False,
-                                   expand_x=True,
-                                   expand_y=True,
-                                   )
+        if destination_tree_data:
+            destination_tree_element = sg.Tree(data=destination_tree_data,
+                                               headings=['Size (KB)', ],
+                                               auto_size_columns=True,
+                                               select_mode=sg.TABLE_SELECT_MODE_EXTENDED,
+                                               num_rows=6,
+                                               col0_width=40,
+                                               row_height=32,
+                                               show_expanded=False,
+                                               enable_events=False,
+                                               expand_x=True,
+                                               expand_y=True,
+                                               )
             confirmation_gui_layout.append([sg.Text("Destination Directory Contents: "), destination_tree_element])
 
 
         if similar_files or dir_trees:
-            confirmation_gui_layout.append([sg.HorizontalSeparator(pad=6)])
-            confirmation_gui_layout.append([sg.Text("Research Results", size=(100, 2), justification='center',
+            confirmation_gui_layout.append([sg.HorizontalSeparator(pad=0)])
+            confirmation_gui_layout.append([sg.Text("Research Results", size=(len(destination_path), 2), justification='center',
                                                     font=('bold'))])
 
 
@@ -389,6 +397,7 @@ class GuiHandler:
         threading.Thread(target=close_window_after_function, args=(long_func,), daemon=True).start()
         while True:
             event, values = window.read()
+            window.bring_to_front()
             if event in (sg.WIN_CLOSED, '-THREAD DONE-'):
                 window.close()
                 return
@@ -1172,7 +1181,9 @@ class Archivist:
                 directory_choice = ArchiverHelpers.split_path(manual_archived_path)[-1]
                 file_code = ArchiverHelpers.file_code_from_destination_dir(directory_choice)
             file_notes = destination_gui_results["Notes"]
-            new_filename = destination_gui_results["Filename"].strip()
+            new_filename = None
+            if destination_gui_results["Filename"]:
+                new_filename = ArchiverHelpers.cleanse_filename(destination_gui_results["Filename"])
             self.file_to_archive = ArchivalFile(current_path=files_in_archiving_dir[0],
                                                 project=project_num,
                                                 new_filename=new_filename,
@@ -1250,7 +1261,7 @@ class Archivist:
                 destination_examples = {path: self.gui.directory_treedata('', path) for path in destination_examples}
 
             confirmation_gui_layout = self.gui.confirmation_layout(destination_path=file_destination,
-                                                                   destination_tree=destination_tree,
+                                                                   destination_tree_data=destination_tree,
                                                                    similar_files=similar_files_paths,
                                                                    dir_trees=destination_examples)
             gui_results = self.gui.make_window("Confirm destination choice.", confirmation_gui_layout)
@@ -1315,7 +1326,7 @@ class Archivist:
         :return:
         """
         while not self.files_to_archive():
-            no_file_error_message = f"No files to archive. To archive additional files, add them to" + os.linesep +\
+            no_file_error_message = f"No files to archive. To archive additional files, add them to: " + os.linesep +\
                                     f"{self.files_to_archive_directory}"
 
             self.info_window(window_name="Directory Empty", info_message=no_file_error_message, is_error=False)
