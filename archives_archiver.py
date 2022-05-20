@@ -19,7 +19,7 @@ from thefuzz import fuzz
 from collections import defaultdict
 from datetime import datetime
 
-#Version Number
+# Version Number
 __version__ = 1.47
 
 # Typing Aliases
@@ -1490,13 +1490,6 @@ def main():
     while True:
         ppdo_archivist.retrieve_file_to_archive()
         ppdo_archivist.retrieve_file_destination_choice()
-
-        '''
-        # if there is no default project number and no project number was entered, display error message and restart loop
-        if not ppdo_archivist.file_to_archive.project_number or ppdo_archivist.file_to_archive.get_destination_path():
-            ppdo_archivist.info_window("No project number selected.")
-            continue
-        '''
 
         #if no destination directory was chosen display error message
         if not ppdo_archivist.file_to_archive.destination_dir:
