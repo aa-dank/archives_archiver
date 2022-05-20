@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 #Version Number
-__version__ = 1.46
+__version__ = 1.47
 
 # Typing Aliases
 # pysimplegui_layout
@@ -75,7 +75,7 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'G9 - Testing and Inspection Reports. Testing Laboratory']
 
 
-class ArchiverHelpers:
+class ArchiverUtilities:
 
     @staticmethod
     def split_path(path):
@@ -166,15 +166,47 @@ class ArchiverHelpers:
         return re.fullmatch(email_regex, potential_email)
 
     @staticmethod
-    def cleanse_filename(pruposed_filename: str):
+    def cleanse_filename(proposed_filename: str):
         """removes illegal filename chars"""
-        clean_filename = pruposed_filename.strip()
+        clean_filename = proposed_filename.strip()
         clean_filename = clean_filename.replace('\n','')
         clean_filename = "".join(i for i in clean_filename if i not in "\/:*?<>|")
         return clean_filename
 
+    @staticmethod
+    def project_number_from_path(file_path):
+        """
+        Extracts a project number from a path
+        :param file_path:
+        :return: project number string
+        """
+        path_list = ArchiverUtilities.split_path(file_path)
+        project_number = None
+        xx_level_idx = None
+        proj_number_directory = None
+        for idx, path_dir in enumerate(path_list):
+            if 'xx' in path_dir and not xx_level_idx:
+                xx_level_idx = idx
+                continue
 
+            if not xx_level_idx:
+                continue
 
+            if idx - 1 == xx_level_idx:
+                if path_dir[0].isdigit() and path_dir[1].isdigit() and path_dir[2].isdigit():
+                    project_number = path_dir.split(" ")[0]
+                    proj_number_directory = path_dir
+                else:
+                    project_number = None
+                    break
+
+            if idx - 2 == xx_level_idx:
+                if project_number in path_dir:
+                    project_number = path_dir.split(" ")[0]
+
+        return project_number
+
+                    
 
 class GuiHandler:
     """
@@ -224,7 +256,7 @@ class GuiHandler:
         def add_files_in_folder(treedata: sg.TreeData, parent, dirname, file_icon_bytes=None, folder_icon_bytes=None):
             files = os.listdir(dirname)
             for f in files:
-                fullpath = ArchiverHelpers.clean_path(os.path.join(dirname, f))
+                fullpath = ArchiverUtilities.clean_path(os.path.join(dirname, f))
                 if os.path.isdir(fullpath):  # if it's a folder, add folder and recurse
                     # add folder to tree
                     treedata.insert(parent, fullpath, f, values=[], icon= folder_icon_bytes)
@@ -424,11 +456,11 @@ class ArchivalFile:
         self.destination_dir = destination_dir
         self.new_filename = new_filename
         self.notes = notes
-        self.destination_path = destination_path
+        self.cached_destination_path = destination_path
         self.datetime_archived = None
         self.file_code = None
         if destination_dir:
-            self.file_code = ArchiverHelpers.file_code_from_destination_dir(destination_dir)
+            self.file_code = ArchiverUtilities.file_code_from_destination_dir(destination_dir)
         self.document_date = None
         if document_date:
             self.document_date = parser.parse(document_date)
@@ -439,7 +471,7 @@ class ArchivalFile:
         them from current filename to desired new filename
         :return:
         """
-        current_filename = ArchiverHelpers.split_path(self.current_path)[-1]
+        current_filename = ArchiverUtilities.split_path(self.current_path)[-1]
         dest_filename = current_filename
         if self.new_filename:
             dest_filename = self.new_filename
@@ -462,7 +494,7 @@ class ArchivalFile:
 
         :return:
         """
-        # TODO handle situation when there is a destination_path but no destination_dir_name
+        # TODO handle situation when there is a cached_destination_path but no destination_dir_name
 
         nested_dirs = self.destination_dir
         if nested_dirs[1].isdigit():
@@ -473,15 +505,16 @@ class ArchivalFile:
             nested_dirs = os.path.join(parent_dir, nested_dirs)
         return str(nested_dirs)
 
-    def assemble_destination_path(self):
+    def get_destination_path(self):
         """
         Major function that builds a plausible path string in the following steps:
-        Step 1: Looks for xx directory in root (RECORDS_SERVER_LOCATION) and adds to path
-        Step 2: Looks through next two levels in directory hierarchy for directories that start with the project number
+        Step 1: If it already has a cached destination path, return that
+        Step 2: Looks for xx directory in root (RECORDS_SERVER_LOCATION) and adds to path
+        Step 3: Looks through next two levels in directory hierarchy for directories that start with the project number
             or a project number prefix and add them to the path.
-        Step 3: Looks for desired directory location in nested levels and adds it to new path
+        Step 4: Looks for desired directory location in nested levels and adds it to new path
 
-        ...unless there is already a path in destination_path attribute, in which case that will be returned
+        ...unless there is already a path in cached_destination_path attribute, in which case that will be returned
         :return: string (or path object?)
         """
 
@@ -512,9 +545,9 @@ class ArchivalFile:
                 return os.path.join(new_path, destination_filename)
 
             new_path_dirs = list_of_child_dirs(new_path)
-            destination_dir = ArchiverHelpers.split_path(large_template_destination)[-1]
+            destination_dir = ArchiverUtilities.split_path(large_template_destination)[-1]
             destination_dir_prefix = destination_dir.split(" ")[0] + " - "  # eg "F5 - ", "G12 - ", "H - ", etc
-            destination_dir_parent_dir = ArchiverHelpers.split_path(large_template_destination)[0]
+            destination_dir_parent_dir = ArchiverUtilities.split_path(large_template_destination)[0]
 
             # if the destination directory is a large template child director...
             if not destination_dir_parent_dir == large_template_destination:
@@ -575,11 +608,11 @@ class ArchivalFile:
 
             return os.path.join(new_path, destination_filename)
 
-        ############### Start of assemble_destination_path() #################
-        if not self.destination_path:
+        ############### Start of get_destination_path() #################
+        if not self.cached_destination_path:
 
             # sept
-            xx_level_dir_prefix, project_num_prefix = ArchiverHelpers.prefixes_from_project_number(self.project_number)
+            xx_level_dir_prefix, project_num_prefix = ArchiverUtilities.prefixes_from_project_number(self.project_number)
             root_directories_list = list_of_child_dirs(RECORDS_SERVER_LOCATION)
             matching_root_dirs = [dir_name for dir_name in root_directories_list if
                                   dir_name.lower().startswith(xx_level_dir_prefix.lower())]
@@ -618,7 +651,7 @@ class ArchivalFile:
                     new_path = os.path.join(new_path, self.project_number)
                     new_path = os.path.join(new_path, self.nested_large_template_destination_dir())
                     new_path = os.path.join(new_path, self.assemble_destination_filename())
-                    self.destination_path = new_path
+                    self.cached_destination_path = new_path
                     return new_path
 
                 if len(dirs_matching_prefix) == 1:
@@ -641,16 +674,16 @@ class ArchivalFile:
                     new_path = path_from_project_num_dir_to_destination(new_path,
                                                                         self.nested_large_template_destination_dir(),
                                                                         self.assemble_destination_filename())
-                    self.destination_path = new_path
-                    return self.destination_path
+                    self.cached_destination_path = new_path
+                    return self.cached_destination_path
 
                 if len(dirs_matching_proj_num) == 1:
                     new_path = os.path.join(new_path, dirs_matching_proj_num[0])
                     new_path = path_from_project_num_dir_to_destination(new_path,
                                                                         self.nested_large_template_destination_dir(),
                                                                         self.assemble_destination_filename())
-                    self.destination_path = new_path
-                    return self.destination_path
+                    self.cached_destination_path = new_path
+                    return self.cached_destination_path
 
             # if we do find a dir that corresponds with the project number...
             if len(dirs_matching_proj_num) == 1:
@@ -673,12 +706,12 @@ class ArchivalFile:
                 new_path = path_from_project_num_dir_to_destination(path_to_project_num_dir= new_path,
                                                                     large_template_destination= self.nested_large_template_destination_dir(),
                                                                     destination_filename= self.assemble_destination_filename())
-                self.destination_path = new_path
-                return self.destination_path
+                self.cached_destination_path = new_path
+                return self.cached_destination_path
 
 
-            self.destination_path = new_path
-        return self.destination_path
+            self.cached_destination_path = new_path
+        return self.cached_destination_path
 
     def attribute_defaultdict(self):
         date_stamp = ''
@@ -687,18 +720,21 @@ class ArchivalFile:
             date_stamp = self.datetime_archived.strftime("%m/%d/%Y, %H:%M:%S")
         if self.document_date:
             doc_date = self.document_date.strftime("%m/%d/%Y, %H:%M:%S")
-        if (self.destination_path or self.current_path) and not self.size:
-            if not self.destination_path:
+        if (self.get_destination_path() or self.current_path) and not self.size:
+            if not os.path.isfile(self.get_destination_path()):
                 self.size = str(os.path.getsize(self.current_path))
             else:
-                self.size = str(os.path.getsize(self.destination_path))
+                self.size = str(os.path.getsize(self.get_destination_path()))
 
         #if we don't have a file code, generate one from the destination
         if self.destination_dir and not self.file_code:
-            self.file_code = ArchiverHelpers.file_code_from_destination_dir(self.destination_dir)
+            self.file_code = ArchiverUtilities.file_code_from_destination_dir(self.destination_dir)
+
+        if not self.project_number:
+            self.project_number = ArchiverUtilities.project_number_from_path(self.get_destination_path())
 
         attribute_dict = {"date_archived": date_stamp, "project_number": self.project_number,
-                          "destination_path": self.destination_path, "document_date": doc_date,
+                          "destination_path": self.get_destination_path(), "document_date": doc_date,
                           "destination_directory": self.destination_dir, "file_code": self.file_code,
                           "file_size": self.size, "notes": self.notes}
         return defaultdict(lambda: None, attribute_dict)
@@ -726,30 +762,20 @@ class ArchivalFile:
         return issues_found
 
 
-    def archive(self, destination=None):
+    def archive(self):
 
         # if the file has already been archived return the destination path
         if self.datetime_archived:
-            return self.destination_path
+            return self.get_destination_path()
 
-        # process optional parameter destination
-        if destination:
-            if destination in DIRECTORY_CHOICES:
-                self.destination_dir = destination
-            else:
-                self.destination_path = destination
-
-        if not self.destination_path:
-            self.destination_path = self.assemble_destination_path()
-
-        destination_path_list = ArchiverHelpers.split_path(self.destination_path)
+        destination_path_list = ArchiverUtilities.split_path(self.get_destination_path())
         destination_dir_path = os.path.join(*destination_path_list[:-1])
 
         if not os.path.exists(destination_dir_path):
             os.makedirs(destination_dir_path)
         self.datetime_archived = datetime.now()
         try:
-            shutil.copyfile(src=self.current_path, dst=self.destination_path)
+            shutil.copyfile(src=self.current_path, dst=self.get_destination_path())
         except Exception as e:
             return False, e
         try:
@@ -951,13 +977,13 @@ class Researcher:
             # split by spaces, the second element is a dash #TODO may need improving
             probably_has_filing_code = lambda dir: (len(dir.split(" ")) > 2) and (dir[0].isalpha()) and \
                                                    (dir.split(" ")[1] == "-")
-            example_dir_name = ArchiverHelpers.split_path(dir_example_path)[-1]
+            example_dir_name = ArchiverUtilities.split_path(dir_example_path)[-1]
             if not probably_has_filing_code(example_dir_name):
                 return False
 
             # if the directory doesn't share a filing code with chosen destination dir, it is not a good example
-            example_file_code = ArchiverHelpers.file_code_from_destination_dir(example_dir_name)
-            if not ArchiverHelpers.file_code_from_destination_dir(chosen_destination_dir) == example_file_code:
+            example_file_code = ArchiverUtilities.file_code_from_destination_dir(example_dir_name)
+            if not ArchiverUtilities.file_code_from_destination_dir(chosen_destination_dir) == example_file_code:
                 return False
 
             # if the example directory doesn't have enough files in it, it is a bad example
@@ -1099,11 +1125,11 @@ class Archivist:
         if not filepath:
             filepath = self.file_to_archive.current_path
         timestamp = str(time.time()).split(".")[0]
-        filename = ArchiverHelpers.split_path(filepath)[-1]
+        filename = ArchiverUtilities.split_path(filepath)[-1]
         copies_dir = os.path.join(os.getcwd(), self.opened_copies_directory)
         copy_path = os.path.join(copies_dir, (timestamp + "_" + filename))
         shutil.copyfile(src=filepath, dst=copy_path)
-        ArchiverHelpers.open_file_with_system_application(copy_path)
+        ArchiverUtilities.open_file_with_system_application(copy_path)
         return
 
     def files_to_archive(self, archiver_dir_path=None):
@@ -1136,7 +1162,7 @@ class Archivist:
         if self.default_project_number:
             default_proj_number = self.default_project_number
 
-        current_file = ArchiverHelpers.split_path(files_in_archiving_dir[0])[-1]
+        current_file = ArchiverUtilities.split_path(files_in_archiving_dir[0])[-1]
         destination_window_layout = self.gui.destination_choice_layout(dir_choices=DIRECTORY_CHOICES,
                                                                        current_filename=current_file,
                                                                        default_project_num=default_proj_number,
@@ -1173,32 +1199,42 @@ class Archivist:
             if destination_gui_results["Directory Choice"]:
                 directory_choice = destination_gui_results["Directory Choice"][0]
 
-            # If there was a manually entered path, populate the file_code, destination_dir, and destination_path
+            # If there was a manually entered path, populate the file_code, destination_dir, and cached_destination_path
             # attribute for the file_to_archive attribute.
             manual_archived_path = destination_gui_results["Manual Path"]
             doc_date = destination_gui_results["Document Date"]
             if manual_archived_path:
-                directory_choice = ArchiverHelpers.split_path(manual_archived_path)[-1]
-                file_code = ArchiverHelpers.file_code_from_destination_dir(directory_choice)
+                directory_choice = ArchiverUtilities.split_path(manual_archived_path)[-1]
+                file_code = ArchiverUtilities.file_code_from_destination_dir(directory_choice)
+
+                # Attempt to get the project number from the path.
+                # If no project number then request archivist enter one.
+                project_num = ArchiverUtilities.project_number_from_path(manual_archived_path)
+                if not project_num:
+                    error = "Unable to parse a project number from the destination path. Please enter a project number in addition to the destination path."
+                    no_proj_num_layout = self.gui.info_message_layout(info_message=str(error), error=True)
+                    self.gui.make_window("Missing project number", window_layout=no_proj_num_layout)
+                    return ""
+
             file_notes = destination_gui_results["Notes"]
             new_filename = None
             if destination_gui_results["Filename"]:
-                new_filename = ArchiverHelpers.cleanse_filename(destination_gui_results["Filename"])
+                new_filename = ArchiverUtilities.cleanse_filename(destination_gui_results["Filename"])
             self.file_to_archive = ArchivalFile(current_path=files_in_archiving_dir[0],
                                                 project=project_num,
                                                 new_filename=new_filename,
                                                 destination_dir=directory_choice,
-                                                document_date= doc_date,
+                                                document_date=doc_date,
                                                 notes=file_notes)
 
             if manual_archived_path:
                 if file_code:
                     self.file_to_archive.file_code = file_code
-                self.file_to_archive.destination_path = os.path.join(manual_archived_path,
-                                                                     self.file_to_archive.assemble_destination_filename())
+                self.file_to_archive.cached_destination_path = os.path.join(manual_archived_path,
+                                                                            self.file_to_archive.assemble_destination_filename())
         return self.file_to_archive
 
-    def research_for_archival_file(self, files= [], destinations= []):
+    def research_for_archival_file(self, files=[], destinations=[]):
         """
         This wrapper function packages the results of the researcher so that it can be called within the
         GuiHandler.Loading_screen() which cannot return values
@@ -1208,7 +1244,7 @@ class Archivist:
         """
         filename = self.file_to_archive.new_filename
         if not filename:
-            filename = ArchiverHelpers.split_path(self.file_to_archive.current_path)[-1]
+            filename = ArchiverUtilities.split_path(self.file_to_archive.current_path)[-1]
         files += self.researcher.similar_filename_paths(original_filename=filename, duration=6, similarity_threshold=72,
                                                         max_paths=7)
 
@@ -1229,7 +1265,7 @@ class Archivist:
         """
 
         try:
-            file_destination = self.file_to_archive.assemble_destination_path()
+            file_destination = self.file_to_archive.get_destination_path()
         except Exception as error:
             except_layout = self.gui.info_message_layout(info_message=str(error), error=True)
             gui_results = self.gui.make_window(window_name="Invalid Destination Choices", window_layout=except_layout)
@@ -1241,7 +1277,7 @@ class Archivist:
             # If the destination directory exists, we'll display its contents as a tree element. First need to extract
             # the path to the destination directory and see if it already exists.
             destination_tree = None
-            destination_list = ArchiverHelpers.split_path(self.file_to_archive.assemble_destination_path())
+            destination_list = ArchiverUtilities.split_path(self.file_to_archive.get_destination_path())
             path_to_destination_dir = os.path.join(*destination_list[:-1])
             if os.path.exists(path_to_destination_dir):
                 destination_tree = self.gui.directory_treedata('', path_to_destination_dir)
@@ -1273,9 +1309,9 @@ class Archivist:
     def archive_file(self):
 
         #if there is a path collision throw an error
-        if self.file_to_archive.destination_path and os.path.exists(self.file_to_archive.destination_path):
+        if self.file_to_archive.cached_destination_path and os.path.exists(self.file_to_archive.cached_destination_path):
             self.info_window(
-                info_message=f"A file exists in that location with the same path: {self.file_to_archive.destination_path}")
+                info_message=f"A file exists in that location with the same path: {self.file_to_archive.cached_destination_path}")
             return
 
         #try to archive the file (kinda fraught) and display any isssues that might have come up.
@@ -1386,7 +1422,7 @@ class Tester:
         file = ArchivalFile(current_location_path=location, project=project, new_filename=new_filename,
                             destination_dir=desired_destination)
 
-        dest_path = file.assemble_destination_path()
+        dest_path = file.get_destination_path()
         print(dest_path)
 
     @staticmethod
@@ -1431,7 +1467,7 @@ class Tester:
         test_file = ArchivalFile(
             current_path=r"C:\Users\adankert\Google Drive\GitHub\archives_archiver\files_to_archive\20220317103244.pdf",
             project='2512',destination_path=r"R:\24xx   Physical Plant Buildings\2512\F8 - Contract",
-            new_filename= "RFI 061",notes= "These are test notes",destination_dir="F8 - Contract",
+            new_filename= "RFI 061",notes="These are test notes",destination_dir="F8 - Contract",
             document_date="December 5, 2012")
         DB.record_document(test_file, 'testemail2@ucsc.edu')
 
@@ -1455,10 +1491,12 @@ def main():
         ppdo_archivist.retrieve_file_to_archive()
         ppdo_archivist.retrieve_file_destination_choice()
 
+        '''
         # if there is no default project number and no project number was entered, display error message and restart loop
-        if not ppdo_archivist.file_to_archive.project_number:
+        if not ppdo_archivist.file_to_archive.project_number or ppdo_archivist.file_to_archive.get_destination_path():
             ppdo_archivist.info_window("No project number selected.")
             continue
+        '''
 
         #if no destination directory was chosen display error message
         if not ppdo_archivist.file_to_archive.destination_dir:
@@ -1470,7 +1508,7 @@ def main():
             is_archived = ppdo_archivist.archive_file()
             if is_archived:
                 ppdo_archivist.add_archived_file_to_database()
-                print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.destination_path}")
+                print(f"File archived: " + os.linesep + f"{ppdo_archivist.file_to_archive.cached_destination_path}")
 
 
 if __name__ == "__main__":

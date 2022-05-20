@@ -1,7 +1,7 @@
 from PIL import Image
 #THis was more about making the directory path and not building the plausible path
 def get_destination_path(self):
-    while not self.destination_path:
+    while not self.cached_destination_path:
         # sort out which root directory to use when searching for result
         project_root_dir_prefix, project_num_prefix = ArchiverHelpers.prefixes_from_project_number(self.project_number)
         root_directories_list = os.listdir(RECORDS_SERVER_LOCATION)
