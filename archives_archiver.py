@@ -20,7 +20,7 @@ from collections import defaultdict
 from datetime import datetime
 
 # Version Number
-__version__ = 1.47
+__version__ = 1.48
 
 # Typing Aliases
 # pysimplegui_layout
@@ -32,11 +32,10 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'D - Environmental Review Process', 'E - Program and Design',
                      'F - Bid Documents and Contract Award', 'G - Construction', "H - Submittals and O&M's",
                      'A1 - Miscellaneous', 'A2 - Working File', 'A3 - Project Directory Matrix & Project Chronology',
-                     "B1 - CPS and Chancellor's Approvals", 'B100 - Other', 'B11 - LEED',
-                     'B12 - Outside Regulatory Agencies', 'B13 - Coastal Commission',
-                     'B2 - Office of the President UC Regents', 'B3 - State Public Works Board',
-                     'B4 - Department of Finance', 'B5 - Legislative Submittals', 'B6 - State Fire Marshal',
-                     'B7 - Office of State Architect  (DSA)', 'B8 -  General Counsel',
+                     "B1 - CPS and Chancellor's Approvals", 'B11 - LEED', 'B12 - Outside Regulatory Agencies',
+                     'B13 - Coastal Commission', 'B2 - Office of the President UC Regents',
+                     'B3 - State Public Works Board', 'B4 - Department of Finance', 'B5 - Legislative Submittals',
+                     'B6 - State Fire Marshal', 'B7 - Office of State Architect  (DSA)', 'B8 -  General Counsel',
                      'B8.1 - General Counsel - Confidential', 'C1 - Executive Architect', 'C1.1 - Selection',
                      'C1.2 - Correspondence', 'C1.3 - Agreement', 'C2 - Other Consultants', 'C2.1 - Selection',
                      'C2.2 - Correspondence', 'C2.3 - Agreement', 'D1 - Environmental Correspondences',
@@ -1204,7 +1203,23 @@ class Archivist:
             manual_archived_path = destination_gui_results["Manual Path"]
             doc_date = destination_gui_results["Document Date"]
             if manual_archived_path:
-                directory_choice = ArchiverUtilities.split_path(manual_archived_path)[-1]
+
+                # Need to attempt to extract the destination directory from manual filepath
+                # Do this by moving in reverse through the path and grabbing highest level directory that starts with
+                # with a filing code
+                file_codes_list = [ArchiverUtilities.file_code_from_destination_dir(dir) for dir in DIRECTORY_CHOICES]
+                file_codes_list = [code + " " if len(code) == 1 else code for code in file_codes_list]
+                directory_choice = ""
+                manual_path_list = ArchiverUtilities.split_path(manual_archived_path)
+                manual_path_list.reverse()
+                for idx, dirname in enumerate(manual_path_list):
+                    if (dirname[:3] in file_codes_list) or (dirname[:2] in file_codes_list):
+                        directory_choice = dirname
+                        break
+
+                if not directory_choice:
+                    raise Exception(f"Could not parse a filing code from the given directory path: \n{manual_archived_path}")
+
                 file_code = ArchiverUtilities.file_code_from_destination_dir(directory_choice)
 
                 # Attempt to get the project number from the path.
