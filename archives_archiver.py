@@ -11,16 +11,20 @@ import threading
 import time
 import pandas as pd
 import PySimpleGUI as sg
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import seaborn as sns
 
 from dateutil import parser
 from contextlib import closing
 from typing import List, Dict
 from thefuzz import fuzz
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Version Number
-__version__ = 1.48
+__version__ = 1.5
 
 # Typing Aliases
 # pysimplegui_layout
@@ -54,9 +58,10 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
                      'F3 - Structural, Title 24, Mech Calculations', 'F4 - Plan Deposits, Planholders, Ads for Bid',
                      'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
-                     'F5 - Drawings and Spec', 'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract',
-                     'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence',
-                     'G1.1 - Contractor Correspondences', 'G1.2 - Executive Architect Correspondences',
+                     'F5 - Drawings and Spec', 'F6 - Affirmative Action', 'F7 - Bid Summary Forms',
+                     'F7.1 - Bid Protest', 'F8 - Contract', 'F9 - Builders Risk Insurance',
+                     'G1 - Construction Correspondence', 'G1.1 - Contractor Correspondences',
+                     'G1.2 - Executive Architect Correspondences',
                      'G1.3 - Users.Building Committee.Campus Correspondences', 'G1.4 - PPC and PP. Certified Payroll',
                      'G1.5 - Geotechnical Engineer Correspondences',
                      'G1.6 - Testing and Inspection to Laboratory Correspondences',
@@ -232,11 +237,30 @@ class GuiHandler:
             with open(folder_icon_path, "rb") as image:
                 self.folder_icon = base64.b64encode(image.read())
 
+    @staticmethod
+    def draw_figure(canvas, figure):
+        figure_canvas_agg = FigureCanvasTkAgg(figure, canvas)
+        figure_canvas_agg.draw()
+        figure_canvas_agg.get_tk_widget().pack(side='top', fill='both', expand=1)
+        return figure_canvas_agg
 
-    def make_window(self, window_name: str, window_layout: list):
+    def make_window(self, window_name: str, window_layout: list, figure=None):
+        """
+
+        :param window_name:
+        :param window_layout:
+        :param figure: matplotlib figure to be included in layout, requires sg.Canvas(key='-CANVAS-') element in layout
+        :return:
+        """
+
         sg.theme(self.gui_theme)
+
         # launch gui
-        window = sg.Window(window_name, layout= window_layout, enable_close_attempted_event= True)
+        if figure:
+            window = sg.Window(window_name, layout=window_layout, finalize=True, enable_close_attempted_event=True)
+            fig_canvas_agg = self.draw_figure(window['-CANVAS-'].TKCanvas, figure)
+        else:
+            window = sg.Window(window_name, layout=window_layout, enable_close_attempted_event=True)
         event, values = window.read()
         window.bring_to_front()
         values["Button Event"] = event
@@ -275,6 +299,7 @@ class GuiHandler:
         welcome_gui_layout = [
             [sg.Text(f"Archives_Archiver Version: {version_number}")],
             [sg.Text("Email address:"), sg.Input(key="Archivist Email")],
+            [sg.Canvas(key='-CANVAS-')],
             [sg.Button("Ok"), sg.Button("Exit")]
         ]
         return welcome_gui_layout
@@ -760,8 +785,7 @@ class ArchivalFile:
             issues_found += "No execution access for the file.\n"
         return issues_found
 
-
-    def archive(self):
+    def archive_in_destination(self):
 
         # if the file has already been archived return the destination path
         if self.datetime_archived:
@@ -849,7 +873,6 @@ class SqliteDatabase:
                 user_id = sql_results[0]
         return user_id
 
-
     def record_document(self, arch_document: ArchivalFile, archivist_email):
         """
         :param arch_document:
@@ -874,6 +897,90 @@ class SqliteDatabase:
 
                 archived_doc_vals.append(attribute_val_dict[col])
             c.execute(insert_sql, archived_doc_vals)
+
+    def generate_archived_stat_barchart(self, days=60):
+        """
+
+        :param days: number of past days from which we aggregate data
+        :return:
+        """
+
+        def generate_daily_sum_dataframe(conn, days):
+            # copy data to dataframes from database connection
+            archived_files_df = pd.read_sql('''SELECT * FROM archived_files''', conn)
+            archivists_df = pd.read_sql('''SELECT * FROM archivists''', conn)
+
+            # This is for creating a column of archivist emails in the archived_files_df
+            archived_files_df["archivist_email"] = ""
+            id_df = None
+            for idx, row in archived_files_df.iterrows():  # loop over dataframe rows
+                archivist_id = row["archivist_id"]
+                id_df = archivists_df[archivists_df["id"] == archivist_id]
+                archivist_email = id_df["email"].iloc[0]
+                archived_files_df.at[idx, "archivist_email"] = archivist_email
+
+            # creates a column of datetime objects that have been created by parsing the string date in "date_archived" column
+            archived_files_df["archived_dt"] = archived_files_df["date_archived"].map(parser.parse)
+            daily_data = []
+            for x in range(0, days):
+                day = datetime.now() - timedelta(days=x)
+                is_same_day = lambda dt: dt.date() == day.date()
+                day_df = archived_files_df[archived_files_df["archived_dt"].map(is_same_day)]
+
+                if day_df.shape[0] != 0:
+                    # create a dictionary of the values we will add to our dictionary
+                    day_row = {"datetime": day, "bytes_archived": day_df["file_size"].sum(),
+                               "files_archived": day_df.shape[0]}
+                    daily_data.append(day_row)
+
+            # create a dataframe of number of files and size of files archived per day
+            aggregate_daily_archived_df = pd.DataFrame(daily_data, columns=["datetime", "bytes_archived", "files_archived"])
+
+            bytes_to_megabytes = lambda b: b / 10000000
+            aggregate_daily_archived_df["bytes_archived"] = aggregate_daily_archived_df["bytes_archived"].map(
+                bytes_to_megabytes)
+            return aggregate_daily_archived_df
+
+        conn = sqlite3.connect(self.path)
+        daily_sum_df = generate_daily_sum_dataframe(conn=conn, days=days)
+        conn.close()
+
+        #plot settings
+        sns.set(font_scale=1.3)
+        sns.set_style("ticks")
+        fig = plt.figure(figsize=(15, 8))
+        width_scale = .45
+
+        # create bytes charts
+        bytes_axis = sns.barplot(x="datetime", y="bytes_archived", data=daily_sum_df)
+        bytes_axis.set(title="Files and Megabytes Archived in last 60 Days", xlabel="Date", ylabel="MegaBytes")
+        for bar in bytes_axis.containers[0]:
+            bar.set_width(bar.get_width() * width_scale)
+
+        # create files axis
+        file_num_axis = bytes_axis.twinx()
+        files_axis = sns.barplot(x="datetime", y="files_archived", data=daily_sum_df, hatch='xx',
+                                 ax=file_num_axis)
+        files_axis.set(ylabel="Files")
+        for bar in files_axis.containers[0]:
+            bar_x = bar.get_x()
+            bar_w = bar.get_width()
+            bar.set_x(bar_x + bar_w * (1 - width_scale))
+            bar.set_width(bar_w * width_scale)
+
+        reformat_label_str = lambda x: parser.parse(x.get_text()).strftime("%m/%d/%Y")
+        bytes_axis.set_xticklabels([reformat_label_str(x) for x in bytes_axis.get_xticklabels()], rotation=30)
+
+        a_val = 0.6
+        colors = ['#EA5739', '#FEFFBE', '#4BB05C']
+        legend_patch_files = mpatches.Patch(facecolor=colors[0], alpha=a_val, hatch=r'xx', label='Files')
+        legend_patch_bytes = mpatches.Patch(facecolor=colors[0], alpha=a_val, label='Megabytes')
+
+        plt.legend(handles=[legend_patch_files, legend_patch_bytes])
+        return fig
+
+
+
 
 
 
@@ -1106,8 +1213,9 @@ class Archivist:
     def retrieve_email(self):
 
         welcome_window_layout = self.gui.welcome_layout()
-        welcome_window_results = self.gui.make_window("Welcome!", welcome_window_layout)
-
+        summary_plot_figure = self.database.generate_archived_stat_barchart()
+        welcome_window_results = self.gui.make_window(window_name="Welcome!", window_layout=welcome_window_layout,
+                                                      figure=summary_plot_figure)
         # if the user clicks exit, shutdown app
         if welcome_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
             self.exit_app()
@@ -1330,7 +1438,7 @@ class Archivist:
             return
 
         #try to archive the file (kinda fraught) and display any isssues that might have come up.
-        archiving_successful, archive_exception = self.file_to_archive.archive()
+        archiving_successful, archive_exception = self.file_to_archive.archive_in_destination()
         if not archiving_successful:
             permission_issue = self.file_to_archive.check_permissions()
             permissions_error_message = "When attempting to duplicate the file to the records drive, \n" +\

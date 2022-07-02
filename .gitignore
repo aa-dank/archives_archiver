@@ -43,8 +43,8 @@ desktop.ini
 # Test and development files #
 ######################
 *.pdf
+*.db
 
 #Dev Files
-/dev_files
 /file_to_archive/*
 .idea/csv-plugin.xml

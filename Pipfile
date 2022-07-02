@@ -8,6 +8,8 @@ thefuzz = "*"
 pysimplegui = "*"
 pandas = "*"
 python-dateutil = "*"
+seaborn = "*"
+jupyter = "*"
 
 [dev-packages]
 
