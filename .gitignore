@@ -47,4 +47,4 @@ desktop.ini
 
 #Dev Files
 /file_to_archive/*
-.idea/csv-plugin.xml
+.idea/*

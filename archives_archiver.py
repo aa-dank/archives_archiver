@@ -210,6 +210,11 @@ class ArchiverUtilities:
 
         return project_number
 
+    @staticmethod
+    def get_monitor_dims():
+        width, height = sg.Window.get_screen_size()
+        return width, height
+
                     
 
 class GuiHandler:
@@ -260,9 +265,9 @@ class GuiHandler:
             window = sg.Window(window_name, layout=window_layout, finalize=True, enable_close_attempted_event=True)
             fig_canvas_agg = self.draw_figure(window['-CANVAS-'].TKCanvas, figure)
         else:
-            window = sg.Window(window_name, layout=window_layout, enable_close_attempted_event=True)
-        event, values = window.read()
+            window = sg.Window(window_name, layout=window_layout, finalize=True, enable_close_attempted_event=True)
         window.bring_to_front()
+        event, values = window.read()
         values["Button Event"] = event
         window.close()
         return defaultdict(None, values)
@@ -1414,7 +1419,7 @@ class Archivist:
                 perform_research = lambda : self.research_for_archival_file(files=similar_files_paths,
                                                                             destinations=destination_examples)
                 self.gui.loading_screen(long_func=perform_research, loading_window_name="Researching...",
-                                        loading_text= "Performing research; please wait...")
+                                        loading_text= "Performing research. Please wait...")
                 similar_files_paths = [path['filepath'] for path in similar_files_paths]
                 # create tree data structures from directory paths
                 destination_examples = {path: self.gui.directory_treedata('', path) for path in destination_examples}
