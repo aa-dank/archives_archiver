@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = 1.51
+__version__ = "1.5.2"
 
 # Typing Aliases
 # pysimplegui_layout
@@ -1340,11 +1340,12 @@ class Archivist:
                 # Attempt to get the project number from the path.
                 # If no project number then request archivist enter one.
                 project_num = ArchiverUtilities.project_number_from_path(manual_archived_path)
-                if not project_num:
-                    error = "Unable to parse a project number from the destination path. Please enter a project number in addition to the destination path."
-                    no_proj_num_layout = self.gui.info_message_layout(info_message=str(error), error=True)
-                    self.gui.make_window("Missing project number", window_layout=no_proj_num_layout)
-                    return ""
+
+            if not project_num:
+                error = "Missing a project number. Please enter a project number"
+                no_proj_num_layout = self.gui.info_message_layout(info_message=str(error), error=True)
+                self.gui.make_window("Missing project number", window_layout=no_proj_num_layout)
+                return ""
 
             file_notes = destination_gui_results["Notes"]
             new_filename = None
@@ -1356,6 +1357,12 @@ class Archivist:
                                                 destination_dir=directory_choice,
                                                 document_date=doc_date,
                                                 notes=file_notes)
+
+            if not self.file_to_archive.destination_dir:
+                error = "Missing a destination directory. Please select a destination form filing codes"
+                no_destination_layout = self.gui.info_message_layout(info_message=str(error), error=True)
+                self.gui.make_window("Missing filing code or destination", window_layout=no_destination_layout)
+                return ""
 
             if manual_archived_path:
                 if file_code:
@@ -1619,11 +1626,10 @@ def main():
     ppdo_archivist.retrieve_email()
     while True:
         ppdo_archivist.retrieve_file_to_archive()
-        ppdo_archivist.retrieve_file_destination_choice()
+        retrieved_dest = ppdo_archivist.retrieve_file_destination_choice()
 
         #if no destination directory was chosen display error message
-        if not ppdo_archivist.file_to_archive.destination_dir:
-            ppdo_archivist.info_window("No destination directory was selected.")
+        if not retrieved_dest:
             continue
 
         destination_confirmed = ppdo_archivist.confirm_chosen_file_destination()
