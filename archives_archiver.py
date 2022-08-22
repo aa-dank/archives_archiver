@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = "1.5.2"
+__version__ = "1.5.3"
 
 # Typing Aliases
 # pysimplegui_layout
@@ -507,10 +507,18 @@ class ArchivalFile:
         if self.new_filename:
             dest_filename = self.new_filename
 
-        extension = current_filename.split(".")[-1]
+        current_filename_list = current_filename.split(".")
+        extension = current_filename_list[-1]
         split_dest_components = dest_filename.split(".")
 
-        # if the destination filename didn't include the file extwension add it to the filename component list
+        # if the filename already starts with the project number and filing code prefix, remove them.
+        if len(split_dest_components) > 2 and dest_filename.lower().startswith(self.project_number.lower() + "."):
+            no_prefix_name = dest_filename[len(self.project_number) + 1:]
+            if no_prefix_name.lower().startswith(self.file_code.lower() + "."):
+                no_prefix_name = no_prefix_name[len(self.file_code) + 1:]
+                split_dest_components = no_prefix_name.split(".")
+
+        # if the destination filename didn't include the file extension add it to the filename component list
         if not split_dest_components[-1] == extension:
             split_dest_components.append(extension)
 
@@ -1628,7 +1636,7 @@ def main():
         ppdo_archivist.retrieve_file_to_archive()
         retrieved_dest = ppdo_archivist.retrieve_file_destination_choice()
 
-        #if no destination directory was chosen display error message
+        # if no destination directory or project number was chosen display error message
         if not retrieved_dest:
             continue
 
