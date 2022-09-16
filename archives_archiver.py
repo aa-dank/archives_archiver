@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = "1.5.3"
+__version__ = "1.5.4"
 
 # Typing Aliases
 # pysimplegui_layout
@@ -321,7 +321,7 @@ class GuiHandler:
             [sg.Text(f"Choose a location for:")],
             [sg.Input(default_text=current_filename, use_readonly_for_disable=True, disabled=True,
                       background_color='#F7F3EC', text_color="black", key='Inert Filename'), sg.Button("Open Copy")],
-            [sg.Text("Default Project:"), sg.Text(default_project_num)],
+            [sg.Text("Default Project Number:"), sg.Text(default_project_num)],
             [sg.Text("Project Number (Leave Blank to use Default.):"), sg.Input(key="New Project Number")],
             [sg.Text("Destination filename"), sg.Input(key="Filename")],
             [sg.Text("Document date:"), sg.Input(key="Document Date")],
@@ -1227,16 +1227,26 @@ class Archivist:
 
     def retrieve_email(self):
 
-        welcome_window_layout = self.gui.welcome_layout()
+        def validate_email(email_str):
+            if (not 'ucsc' in email_str) or (not '@' in email_str):
+                return False
+            return True
+
         summary_plot_figure = self.database.generate_archived_stat_barchart()
-        welcome_window_results = self.gui.make_window(window_name="Welcome!", window_layout=welcome_window_layout,
-                                                      figure=summary_plot_figure)
-        # if the user clicks exit, shutdown app
-        if welcome_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
-            self.exit_app()
-        else:
-            self.email = welcome_window_results["Archivist Email"]
-            return
+        while not self.email:
+            welcome_window_layout = self.gui.welcome_layout()
+            welcome_window_results = self.gui.make_window(window_name="Welcome!", window_layout=welcome_window_layout,
+                                                          figure=summary_plot_figure)
+            # if the user clicks exit, shutdown app
+            if welcome_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
+                self.exit_app()
+            else:
+                email_entry = welcome_window_results["Archivist Email"].lower().strip()
+                if not validate_email(email_entry):
+                    self.info_window(info_message="Please enter your UCSC email. Cannot continue without ucsc email.")
+                else:
+                    self.email = email_entry
+        return
 
     def open_file_copy(self, filepath: str = ''):
         """
