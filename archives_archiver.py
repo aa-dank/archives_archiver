@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = "1.5.4"
+__version__ = "1.5.5"
 
 # Typing Aliases
 # pysimplegui_layout
@@ -1629,7 +1629,7 @@ class Tester:
 
 def main():
     app_files_dir = 'app_files'
-    database_path = r"\\128.114.170.27\Archive_Data\archives_archiver.db"
+    database_path = r"\\ppcou.ucsc.edu\Data\Archive_Data\archives_archiver.db"
     gui_file_icon_filename = "file_3d_32x32.png"
     gui_dir_icon_filename = "folder_3d_32x32.png"
 
