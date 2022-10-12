@@ -24,7 +24,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = "1.5.6"
+__version__ = "1.5.7"
 
 # Typing Aliases
 # pysimplegui_layout
@@ -55,17 +55,17 @@ DIRECTORY_CHOICES = ['A - General', 'B - Administrative Reviews and Approvals', 
                      'E5.7 - Other', 'E5.8 - Office of General Counsel', 'E6 - Reports (soils, structural, calcs)',
                      'E7 - Value Engineering', 'E7.1 - Value Engineering Correspondence',
                      'E7.2 - VE Workshop Minutes, Summaries, Final Reports', 'E8 - Program and Design Meeting Minutes',
-                     'F1 - Bid and Contract Award Correspondence', 'F1.1 - Executive Architect Correspondences',
-                     'F1.2 - Special Consultants Correspondences', 'F1.4 - PPC and PP',
-                     'F1.5 - Office of the President Correspondences', 'F1.6 - General Counsel Correspondences',
-                     'F1.7 - Pre-Qualification', 'F1.8 - Other', 'F10 - Escrow Agreement',
-                     'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews', 'F2.2 - In-house. PP reviews',
-                     'F3 - Structural, Title 24, Mech Calculations', 'F4 - Plan Deposits, Planholders, Ads for Bid',
-                     'F2.3 - Independent Cost Review', 'F2.4 - Independent Seismic Review', 'F2.5 - Other',
-                     'F5 - Drawings and Spec', 'F6 - Affirmative Action', 'F7 - Bid Summary Forms',
-                     'F7.1 - Bid Protest', 'F8 - Contract', 'F9 - Builders Risk Insurance',
-                     'G1 - Construction Correspondence', 'G1.1 - Contractor Correspondences',
-                     'G1.2 - Executive Architect Correspondences',
+                     'E9 - Sustainability Measures','F1 - Bid and Contract Award Correspondence',
+                     'F1.1 - Executive Architect Correspondences', 'F1.2 - Special Consultants Correspondences',
+                     'F1.4 - PPC and PP', 'F1.5 - Office of the President Correspondences',
+                     'F1.6 - General Counsel Correspondences', 'F1.7 - Pre-Qualification', 'F1.8 - Other',
+                     'F10 - Escrow Agreement', 'F2 - Reviews', 'F2.1 - Constructibility, Code Reviews',
+                     'F2.2 - In-house. PP reviews', 'F3 - Structural, Title 24, Mech Calculations',
+                     'F4 - Plan Deposits, Planholders, Ads for Bid', 'F2.3 - Independent Cost Review',
+                     'F2.4 - Independent Seismic Review', 'F2.5 - Other', 'F5 - Drawings and Spec',
+                     'F6 - Affirmative Action', 'F7 - Bid Summary Forms', 'F7.1 - Bid Protest', 'F8 - Contract',
+                     'F9 - Builders Risk Insurance', 'G1 - Construction Correspondence',
+                     'G1.1 - Contractor Correspondences','G1.2 - Executive Architect Correspondences',
                      'G1.3 - Users.Building Committee.Campus Correspondences', 'G1.4 - PPC and PP. Certified Payroll',
                      'G1.5 - Geotechnical Engineer Correspondences',
                      'G1.6 - Testing and Inspection to Laboratory Correspondences',
