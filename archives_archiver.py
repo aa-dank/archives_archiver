@@ -1,6 +1,7 @@
 import base64
 import os
 import logging
+import psycopg2
 import random
 import re
 import subprocess
@@ -831,7 +832,7 @@ class SqliteDatabase:
         self.datetime_format = "%m/%d/%Y, %H:%M:%S"
         self.path = path
         self.archivist_tablename = 'archivists'
-        self.document_tablename = 'archived_files'
+        self.document_tablename = 'arcd_files'
         self.connection = sqlite3.connect(self.path)
         self.archivists_table_cols = {'email': 'TEXT NOT NULL'}
         self.archived_doc_table_cols = {'destination_path': 'TEXT', 'project_number': 'TEXT',
@@ -865,7 +866,7 @@ class SqliteDatabase:
             archival_docs_setup_sql = archival_docs_setup_sql[:-4] + r"); "
             c.execute(archival_docs_setup_sql)
 
-    def add_user(self, archivist_dict):
+    def add_archivist(self, archivist_dict):
         column_names = list(self.archivists_table_cols.keys())
         questionmark_placeholders = ",".join(['?' for _ in column_names])
         sql_cols = ",".join(column_names)
@@ -875,7 +876,7 @@ class SqliteDatabase:
             vals = tuple([archivist_dict[k] for k in column_names])
             c.execute(insert_sql, vals)
 
-    def user_id_from_email(self, user_email):
+    def archivist_id_from_email(self, user_email):
 
         with closing(sqlite3.connect(self.path)) as conn:
             c = conn.cursor()
@@ -885,7 +886,7 @@ class SqliteDatabase:
                 c.execute(get_user_id_sql, (user_email,))
                 sql_results = c.fetchone()
                 if not sql_results:
-                    self.add_user({'email': user_email})
+                    self.add_archivist({'email': user_email})
                     continue
                 user_id = sql_results[0]
         return user_id
@@ -904,7 +905,7 @@ class SqliteDatabase:
         with sqlite3.connect(self.path) as conn:
             c = conn.cursor()
             attribute_val_dict = arch_document.attribute_defaultdict()
-            attribute_val_dict['archivist_id'] = self.user_id_from_email(archivist_email)
+            attribute_val_dict['archivist_id'] = self.archivist_id_from_email(archivist_email)
             archived_doc_vals = []
             for col in column_names:
 
@@ -995,6 +996,69 @@ class SqliteDatabase:
 
         plt.legend(handles=[legend_patch_files, legend_patch_bytes])
         return fig
+
+
+
+class PostgresDatabase:
+
+    def __init__(self, host, username, password, port, db_name):
+        self.datetime_format = "%m/%d/%Y, %H:%M:%S"
+        self.host = host
+        self.username = username
+        self.password = password
+        self.port = port
+        self.db_name = db_name
+        self.user_tablename = 'users'
+        self.user_table_cols = {'email':'CHARACTER VARYING NOT NULL',
+                                'first_name': 'CHARACTER VARYING',
+                                'last_name':'CHARACTER VARYING',
+                                'roles': 'CHARACTER VARYING',
+                                'password': 'CHARACTER VARYING(60)'}
+        self.archived_files_tablename = 'archived_files'
+        self.archived_files_table_cols = {'destination_path': 'CHARACTER VARYING NOT NULL',
+                                          'project_number': 'CHARACTER VARYING NOT NULL',
+                                          'document_date': 'CHARACTER VARYING',
+                                          'destination_directory':'CHARACTER VARYING NOT NULL',
+                                          'file_code':'CHARACTER VARYING NOT NULL',
+                                          'file_size': 'CHARACTER VARYING NOT NULL',
+                                          'date_archived': 'TIMESTAMP WITHOUT TIME ZONE NOT NULL',
+                                          'archivist_id': 'INTEGER NOT NULL',
+                                          'notes': 'CHARACTER VARYING',
+                                          'filename':'CHARACTER VARYING',
+                                          'extension': 'CHARACTER VARYING'}
+        self.conn = None
+
+    def get_connection(self):
+        """
+        Connect to a Postgres database.
+        https://hackersandslackers.com/psycopg2-postgres-python/
+        :return:
+        """
+        if self.conn is None:
+            self.conn = psycopg2.connect(
+                host=self.host,
+                user=self.username,
+                password=self.password,
+                port=self.port,
+                dbname=self.dbname
+            )
+
+        return self.conn
+
+    def add_archivist(self, archivist_dict):
+        """
+
+        :param archivist_dict:
+        :return:
+        """
+        column_names = list(self.user_table_cols.keys())
+        questionmark_placeholders = ",".join(['?' for _ in column_names])
+        sql_cols = ",".join(column_names)
+        insert_sql = f""" INSERT INTO {self.archivist_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        with sqlite3.connect(self.path) as conn:
+            c = conn.cursor()
+            vals = tuple([archivist_dict[k] for k in column_names])
+            c.execute(insert_sql, vals)
 
 
 

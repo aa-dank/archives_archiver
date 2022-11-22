@@ -10,6 +10,7 @@ pandas = "*"
 python-dateutil = "*"
 seaborn = "*"
 jupyter = "*"
+psycopg2 = "*"
 
 [dev-packages]
 
