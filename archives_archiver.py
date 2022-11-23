@@ -19,7 +19,7 @@ import seaborn as sns
 
 from dateutil import parser
 from contextlib import closing
-from typing import List, Dict
+from typing import List, Dict, Union
 from thefuzz import fuzz
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -1045,24 +1045,145 @@ class PostgresDatabase:
 
         return self.conn
 
-    def add_archivist(self, archivist_dict):
+    def add_user(self, user_dict: dict):
         """
 
-        :param archivist_dict:
+        :param user_dict:
         :return:
         """
         column_names = list(self.user_table_cols.keys())
         questionmark_placeholders = ",".join(['?' for _ in column_names])
         sql_cols = ",".join(column_names)
-        insert_sql = f""" INSERT INTO {self.archivist_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
-        with sqlite3.connect(self.path) as conn:
+        insert_sql = f""" INSERT INTO {self.user_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        with closing(self.get_connection()) as conn:
             c = conn.cursor()
-            vals = tuple([archivist_dict[k] for k in column_names])
+            vals = tuple([user_dict[k] for k in column_names])
             c.execute(insert_sql, vals)
 
+    def archivist_id_from_user_dict(self, user_dict):
+        with closing(self.get_connection()) as conn:
+            c = conn.cursor()
+            user_id = None
+            user_email = user_dict.get('email')
+            while not user_id:
+                get_user_id_sql = f"""SELECT id FROM {self.user_tablename} WHERE email = ?"""
+                c.execute(get_user_id_sql, (user_email,))
+                sql_results = c.fetchone()
+                if not sql_results:
+                    self.add_user(user_dict=user_dict)
+                    continue
+                user_id = sql_results[0]
+        return user_id
+
+    def record_document(self, arch_document: ArchivalFile, user_dict: Dict[str, str]):
+        """
+        :param arch_document:
+        :param archivist_email:
+        :return:
+        """
+
+        column_names = list(self.archived_files_table_cols.keys())
+        questionmark_placeholders = ",".join(['?' for _ in column_names])
+        sql_cols = ",".join(column_names)
+        insert_sql = f""" INSERT INTO {self.archived_files_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        with closing(self.get_connection()) as conn:
+            c = conn.cursor()
+            attribute_val_dict = arch_document.attribute_defaultdict()
+            #TODO convert attribute_val_dict to go into database
+            attribute_val_dict['archivist_id'] = self.archivist_id_from_user_dict(user_dict)
+            archived_doc_vals = []
+            for col in column_names:
+
+                if col == 'date_archived':
+                    archived_doc_vals.append(datetime.now().strftime(self.datetime_format))
+                    continue
+
+                archived_doc_vals.append(attribute_val_dict[col])
+            c.execute(insert_sql, archived_doc_vals)
 
 
+    def generate_archived_stat_barchart(self, days=60):
+        """
 
+        :param days: number of past days from which we aggregate data
+        :return:
+        """
+
+
+        def generate_daily_sum_dataframe(conn, days):
+            # copy data to dataframes from database connection
+            archived_files_df = pd.read_sql(f'''SELECT * FROM {self.archived_files_tablename}''', conn)
+            archivists_df = pd.read_sql(f'''SELECT * FROM {self.user_tablename}''', conn)
+            #TODO use sql query to only get relevant records
+
+            # This is for creating a column of archivist emails in the archived_files_df
+            archived_files_df["archivist_email"] = ""
+            id_df = None
+            for idx, row in archived_files_df.iterrows():  # loop over dataframe rows
+                archivist_id = row["archivist_id"]
+                id_df = archivists_df[archivists_df["id"] == archivist_id]
+                archivist_email = id_df["email"].iloc[0]
+                archived_files_df.at[idx, "archivist_email"] = archivist_email
+
+            # creates a column of datetime objects that have been created by parsing the string date in "date_archived" column
+            archived_files_df["archived_dt"] = archived_files_df["date_archived"].map(parser.parse)
+            daily_data = []
+            for x in range(0, days):
+                day = datetime.now() - timedelta(days=x)
+                is_same_day = lambda dt: dt.date() == day.date()
+                day_df = archived_files_df[archived_files_df["archived_dt"].map(is_same_day)]
+
+                if day_df.shape[0] != 0:
+                    # create a dictionary of the values we will add to our dictionary
+                    day_row = {"datetime": day, "bytes_archived": day_df["file_size"].sum(),
+                               "files_archived": day_df.shape[0]}
+                    daily_data.append(day_row)
+
+            # create a dataframe of number of files and size of files archived per day
+            aggregate_daily_archived_df = pd.DataFrame(daily_data, columns=["datetime", "bytes_archived", "files_archived"])
+
+            bytes_to_megabytes = lambda b: b / 10000000
+            aggregate_daily_archived_df["bytes_archived"] = aggregate_daily_archived_df["bytes_archived"].map(
+                bytes_to_megabytes)
+            return aggregate_daily_archived_df
+
+        conn = self.get_connection()
+        daily_sum_df = generate_daily_sum_dataframe(conn=conn, days=days)
+        conn.close()
+
+        #plot settings
+        sns.set(font_scale=1.3)
+        sns.set_style("ticks")
+        fig = plt.figure(figsize=(15, 8))
+        width_scale = .45
+
+        # create bytes charts
+        bytes_axis = sns.barplot(x="datetime", y="bytes_archived", data=daily_sum_df)
+        bytes_axis.set(title="Files and Megabytes Archived in last 60 Days", xlabel="Date", ylabel="MegaBytes")
+        for bar in bytes_axis.containers[0]:
+            bar.set_width(bar.get_width() * width_scale)
+
+        # create files axis
+        file_num_axis = bytes_axis.twinx()
+        files_axis = sns.barplot(x="datetime", y="files_archived", data=daily_sum_df, hatch='xx',
+                                 ax=file_num_axis)
+        files_axis.set(ylabel="Files")
+        for bar in files_axis.containers[0]:
+            bar_x = bar.get_x()
+            bar_w = bar.get_width()
+            bar.set_x(bar_x + bar_w * (1 - width_scale))
+            bar.set_width(bar_w * width_scale)
+
+        reformat_label_str = lambda x: parser.parse(x.get_text()).strftime("%m/%d/%Y")
+        bytes_axis.set_xticklabels([reformat_label_str(x) for x in bytes_axis.get_xticklabels()], rotation=30)
+
+        a_val = 0.6
+        colors = ['#EA5739', '#FEFFBE', '#4BB05C']
+        legend_patch_files = mpatches.Patch(facecolor=colors[0], alpha=a_val, hatch=r'xx', label='Files')
+        legend_patch_bytes = mpatches.Patch(facecolor=colors[0], alpha=a_val, label='Megabytes')
+
+        plt.legend(handles=[legend_patch_files, legend_patch_bytes])
+        return fig
 
 
 class Researcher:
