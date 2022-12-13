@@ -279,7 +279,7 @@ class GuiHandler:
 
     def directory_treedata(self, parent_dir, dir_name) -> sg.TreeData:
         """
-        Creates PysimpleGUI.TreeData ogjects from a given directory
+        Creates PysimpleGUI.TreeData objects from a given directory
         https://github.com/PySimpleGUI/PySimpleGUI/blob/master/DemoPrograms/Demo_Tree_Element.py
         :param parent_dir:
         :param dir_name:
@@ -309,6 +309,7 @@ class GuiHandler:
         welcome_gui_layout = [
             [sg.Text(f"Archives_Archiver Version: {version_number}")],
             [sg.Text("Email address:"), sg.Input(key="Archivist Email")],
+            [sg.Text("Database:"), sg.Combo(values=('Postgres', 'Sqlite'), default_value='Postgres', readonly=False, key="Database")],
             [sg.Canvas(key='-CANVAS-')],
             [sg.Button("Ok"), sg.Button("Exit")]
         ]
@@ -881,17 +882,14 @@ class SqliteDatabase:
         with closing(sqlite3.connect(self.path)) as conn:
             c = conn.cursor()
             user_id = None
-            while not user_id:
-                get_user_id_sql = f"""SELECT id FROM {self.archivist_tablename} WHERE email = ?"""
-                c.execute(get_user_id_sql, (user_email,))
-                sql_results = c.fetchone()
-                if not sql_results:
-                    self.add_archivist({'email': user_email})
-                    continue
+            get_user_id_sql = f"""SELECT id FROM {self.archivist_tablename} WHERE email = ?"""
+            c.execute(get_user_id_sql, (user_email,))
+            sql_results = c.fetchone()
+            if sql_results:
                 user_id = sql_results[0]
         return user_id
 
-    def record_document(self, arch_document: ArchivalFile, archivist_email):
+    def record_document(self, arch_document: ArchivalFile, archivist_email: str):
         """
         :param arch_document:
         :param archivist_email:
@@ -1034,13 +1032,13 @@ class PostgresDatabase:
         https://hackersandslackers.com/psycopg2-postgres-python/
         :return:
         """
-        if self.conn is None:
+        if self.conn is None or self.conn.closed:
             self.conn = psycopg2.connect(
                 host=self.host,
                 user=self.username,
                 password=self.password,
                 port=self.port,
-                dbname=self.dbname
+                dbname=self.db_name
             )
 
         return self.conn
@@ -1060,22 +1058,18 @@ class PostgresDatabase:
             vals = tuple([user_dict[k] for k in column_names])
             c.execute(insert_sql, vals)
 
-    def archivist_id_from_user_dict(self, user_dict):
+    def archivist_id_from_email(self, email):
         with closing(self.get_connection()) as conn:
             c = conn.cursor()
             user_id = None
-            user_email = user_dict.get('email')
-            while not user_id:
-                get_user_id_sql = f"""SELECT id FROM {self.user_tablename} WHERE email = ?"""
-                c.execute(get_user_id_sql, (user_email,))
-                sql_results = c.fetchone()
-                if not sql_results:
-                    self.add_user(user_dict=user_dict)
-                    continue
-                user_id = sql_results[0]
+            get_user_id_sql = f"""SELECT id FROM {self.user_tablename} WHERE email = '{email}';"""
+            c.execute(get_user_id_sql)
+            sql_results = c.fetchone()
+            if sql_results:
+                    user_id = sql_results[0]
         return user_id
 
-    def record_document(self, arch_document: ArchivalFile, user_dict: Dict[str, str]):
+    def record_document(self, arch_document: ArchivalFile, archivist_email: str):
         """
         :param arch_document:
         :param archivist_email:
@@ -1083,14 +1077,12 @@ class PostgresDatabase:
         """
 
         column_names = list(self.archived_files_table_cols.keys())
-        questionmark_placeholders = ",".join(['?' for _ in column_names])
+        placeholders = ",".join(['%s' for _ in column_names])
         sql_cols = ",".join(column_names)
-        insert_sql = f""" INSERT INTO {self.archived_files_tablename}({sql_cols}) VALUES({questionmark_placeholders}) """
+        insert_sql = f"""INSERT INTO {self.archived_files_tablename}({sql_cols}) VALUES ({placeholders})"""
+        attribute_val_dict = arch_document.attribute_defaultdict()
+        attribute_val_dict['archivist_id'] = self.archivist_id_from_email(archivist_email)
         with closing(self.get_connection()) as conn:
-            c = conn.cursor()
-            attribute_val_dict = arch_document.attribute_defaultdict()
-            #TODO convert attribute_val_dict to go into database
-            attribute_val_dict['archivist_id'] = self.archivist_id_from_user_dict(user_dict)
             archived_doc_vals = []
             for col in column_names:
 
@@ -1099,6 +1091,8 @@ class PostgresDatabase:
                     continue
 
                 archived_doc_vals.append(attribute_val_dict[col])
+
+            c = conn.cursor()
             c.execute(insert_sql, archived_doc_vals)
 
 
@@ -1352,7 +1346,7 @@ class Archivist:
     """
 
     def __init__(self, files_to_archive_directory: str, app_files_directory: str, records_drive_path: str,
-                 gui_file_icon: str, gui_dir_icon: str, database_location: str,
+                 gui_file_icon: str, gui_dir_icon: str, database: Union[SqliteDatabase, PostgresDatabase],
                  file_to_archive: ArchivalFile = None):
 
         ##Build necessary directory structure###
@@ -1395,7 +1389,7 @@ class Archivist:
         self.default_project_number = None
         self.perform_research = True
         self.researcher = Researcher()
-        self.database = SqliteDatabase(database_location)
+        self.database = database
         self.datetime_format = "%m/%d/%Y, %H:%M:%S"
 
     def info_window(self, window_name="ERROR", info_message='', is_error=True) -> bool:
@@ -1412,28 +1406,28 @@ class Archivist:
             self.exit_app()
         return info_window_results["Button Event"].lower() == "ok"
 
-    def retrieve_email(self):
+    def get_setup_info(self):
 
         def validate_email(email_str):
             if (not 'ucsc' in email_str) or (not '@' in email_str):
                 return False
             return True
 
-        summary_plot_figure = self.database.generate_archived_stat_barchart()
         while not self.email:
             welcome_window_layout = self.gui.welcome_layout()
-            welcome_window_results = self.gui.make_window(window_name="Welcome!", window_layout=welcome_window_layout,
-                                                          figure=summary_plot_figure)
+            welcome_window_results = self.gui.make_window(window_name="Welcome!", window_layout=welcome_window_layout)
             # if the user clicks exit, shutdown app
             if welcome_window_results["Button Event"].lower() in ["exit", self.gui.window_close_button_event.lower()]:
                 self.exit_app()
             else:
                 email_entry = welcome_window_results["Archivist Email"].lower().strip()
+                database_choice = welcome_window_results["Database"]
+
                 if not validate_email(email_entry):
                     self.info_window(info_message="Please enter your UCSC email. Cannot continue without ucsc email.")
                 else:
                     self.email = email_entry
-        return
+        return email_entry, database_choice
 
     def open_file_copy(self, filepath: str = ''):
         """
@@ -1816,9 +1810,29 @@ class Tester:
 
 def main():
     app_files_dir = 'app_files'
-    database_path = r"\\ppcou.ucsc.edu\Data\Archive_Data\archives_archiver.db"
     gui_file_icon_filename = "file_3d_32x32.png"
     gui_dir_icon_filename = "folder_3d_32x32.png"
+
+    # Use this code to replace the application database with a sqlite database
+    # sqlite_database_path = r"\\ppcou.ucsc.edu\Data\Archive_Data\archives_archiver.db"
+    # db = SqliteDatabase(sqlite_database_path)
+
+    # create PostgresDatabase object
+    prod_postgres_db_info = {"host":r"128.114.128.27",
+                             "username":"archives",
+                             "password":"1156High",
+                             "port":"5432",
+                             "db_name":"archives"}
+
+    test_postgres_db_info = {"host": r"localhost",
+                             "username": "archives",
+                             "password": "1156high",
+                             "port": "5432",
+                             "db_name": "archives"}
+
+    sqlite_db_path = ""
+
+    db = PostgresDatabase(**prod_postgres_db_info)
 
     dir_of_files_to_archive = os.path.join(os.getcwd(), "files_to_archive")
     ppdo_archivist = Archivist(files_to_archive_directory=dir_of_files_to_archive,
@@ -1826,9 +1840,33 @@ def main():
                                records_drive_path=RECORDS_SERVER_LOCATION,
                                gui_file_icon=gui_file_icon_filename,
                                gui_dir_icon=gui_dir_icon_filename,
-                               database_location=database_path)
+                               database=None)
 
-    ppdo_archivist.retrieve_email()
+    user_email = None
+    while not user_email:
+        user_email, db_choice = ppdo_archivist.get_setup_info()
+        if db_choice == 'Postgres':
+            ppdo_archivist.database = PostgresDatabase(**prod_postgres_db_info)
+        else:
+            ppdo_archivist.database = SqliteDatabase(path=sqlite_db_path)
+
+        # Test the connection to the database.
+        try:
+            with closing(ppdo_archivist.database.get_connection()) as conn:
+                pass
+        except Exception as e:
+            msg = "There was an error connecting to the database. (Are you connected to the VPN?)"
+            ppdo_archivist.info_window(window_name="DB connection error",
+                                       info_message=msg)
+            continue
+
+        # see if a user account exists for the input email
+        user_idx = ppdo_archivist.database.archivist_id_from_email(user_email)
+        if not user_idx:
+            ppdo_archivist.info_window(window_name="No account for this email.",
+                                       info_message=f"There is no account found for this email: {user_email}.")
+            user_email = None
+
     while True:
         ppdo_archivist.retrieve_file_to_archive()
         retrieved_dest = ppdo_archivist.retrieve_file_destination_choice()
