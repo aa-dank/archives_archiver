@@ -25,7 +25,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 
 # Version Number
-__version__ = "1.5.7"
+__version__ = "1.5.8"
 
 # Typing Aliases
 # pysimplegui_layout
